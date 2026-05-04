@@ -101,8 +101,13 @@ def _active_credentials() -> tuple[str, str]:
     settings = get_settings()
     user = settings.admin_dashboard_username
     pw_override = _ss.get("admin_dashboard_password_override")
-    pw = pw_override if isinstance(pw_override, str) and pw_override else settings.admin_dashboard_password
+    pw = (
+        pw_override
+        if isinstance(pw_override, str) and pw_override
+        else settings.admin_dashboard_password
+    )
     return user, pw
+
 
 SESSION_COOKIE_NAME = "admin_session"
 SESSION_TTL = timedelta(hours=4)
@@ -134,8 +139,7 @@ def _ip_allowed(ip: str) -> bool:
 
 def _forbidden(message: str = "Forbidden") -> HTMLResponse:
     return HTMLResponse(
-        f"<!doctype html><html><body><h1>403 Forbidden</h1>"
-        f"<p>{message}</p></body></html>",
+        f"<!doctype html><html><body><h1>403 Forbidden</h1><p>{message}</p></body></html>",
         status_code=403,
     )
 
@@ -154,8 +158,7 @@ def _create_session(ip: str) -> str:
 def _purge_expired() -> None:
     now = datetime.now(tz=UTC)
     stale = [
-        sid for sid, meta in _sessions.items()
-        if meta.get("expires") and meta["expires"] < now
+        sid for sid, meta in _sessions.items() if meta.get("expires") and meta["expires"] < now
     ]
     for sid in stale:
         _sessions.pop(sid, None)
@@ -185,9 +188,7 @@ async def get_dashboard_session(request: Request) -> str:
         raise DashboardAuthError(_forbidden(f"IP {ip} not allowed."))
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if not _valid_session(session_id, ip):
-        raise DashboardAuthError(
-            RedirectResponse(url="/admin/login", status_code=303)
-        )
+        raise DashboardAuthError(RedirectResponse(url="/admin/login", status_code=303))
     assert session_id is not None
     return session_id
 
@@ -279,9 +280,7 @@ def _metrics_summary() -> list[tuple[str, str]]:
         if metric.name not in interesting:
             continue
         for sample in metric.samples:
-            label_str = ",".join(
-                f"{k}={v}" for k, v in sorted(sample.labels.items())
-            )
+            label_str = ",".join(f"{k}={v}" for k, v in sorted(sample.labels.items()))
             display = sample.name
             if label_str:
                 display = f"{sample.name}{{{label_str}}}"
@@ -303,14 +302,10 @@ async def dashboard_home(
 
         async with sm() as session:
             exception_ip_count = (
-                await session.scalar(
-                    select(sa_func.count()).select_from(ExceptionIp)
-                )
+                await session.scalar(select(sa_func.count()).select_from(ExceptionIp))
             ) or 0
             api_caller_count = (
-                await session.scalar(
-                    select(sa_func.count()).select_from(ApiIpCaller)
-                )
+                await session.scalar(select(sa_func.count()).select_from(ApiIpCaller))
             ) or 0
     except Exception as e:
         logger.warning("dashboard_home counts unavailable: %s", e)
@@ -340,13 +335,9 @@ async def ip_allowlist_page(
     caller_rows: list[ApiIpCaller] = []
     try:
         async with sm() as session:
-            r1 = await session.execute(
-                select(ExceptionIp).order_by(ExceptionIp.id.desc())
-            )
+            r1 = await session.execute(select(ExceptionIp).order_by(ExceptionIp.id.desc()))
             exception_rows = list(r1.scalars().all())
-            r2 = await session.execute(
-                select(ApiIpCaller).order_by(ApiIpCaller.id.desc())
-            )
+            r2 = await session.execute(select(ApiIpCaller).order_by(ApiIpCaller.id.desc()))
             caller_rows = list(r2.scalars().all())
     except Exception as e:
         logger.warning("ip_allowlist_page query failed: %s", e)
@@ -408,9 +399,7 @@ async def exception_ips_delete(
     sm = get_sessionmaker()
     try:
         async with sm() as session:
-            await session.execute(
-                delete(ExceptionIp).where(ExceptionIp.id == row_id)
-            )
+            await session.execute(delete(ExceptionIp).where(ExceptionIp.id == row_id))
             await session.commit()
         async with sm() as session:
             await reload_exception_ips(session)
@@ -423,9 +412,7 @@ async def _list_exception_ips() -> list[ExceptionIp]:
     sm = get_sessionmaker()
     try:
         async with sm() as session:
-            result = await session.execute(
-                select(ExceptionIp).order_by(ExceptionIp.id.desc())
-            )
+            result = await session.execute(select(ExceptionIp).order_by(ExceptionIp.id.desc()))
             return list(result.scalars().all())
     except Exception:
         return []
@@ -484,9 +471,7 @@ async def api_callers_delete(
     sm = get_sessionmaker()
     try:
         async with sm() as session:
-            await session.execute(
-                delete(ApiIpCaller).where(ApiIpCaller.id == row_id)
-            )
+            await session.execute(delete(ApiIpCaller).where(ApiIpCaller.id == row_id))
             await session.commit()
         async with sm() as session:
             await reload_api_ip_callers(session)
@@ -600,7 +585,7 @@ async def patterns_edit_save(
     patterns: list[dict[str, Any]] = []
     for i in range(rows):
         name = (pattern_name[i] if i < len(pattern_name) else "").strip()
-        regex = (pattern_regex[i] if i < len(pattern_regex) else "")
+        regex = pattern_regex[i] if i < len(pattern_regex) else ""
         score_raw = (pattern_score[i] if i < len(pattern_score) else "").strip()
         if not name and not regex:
             continue
@@ -677,9 +662,7 @@ async def audit_list(
     try:
         async with sm() as session:
             result = await session.execute(
-                select(AuditEvent)
-                .order_by(AuditEvent.occurred_at.desc())
-                .limit(_AUDIT_PAGE_SIZE)
+                select(AuditEvent).order_by(AuditEvent.occurred_at.desc()).limit(_AUDIT_PAGE_SIZE)
             )
             rows = list(result.scalars().all())
     except Exception as e:
@@ -720,7 +703,9 @@ async def pii_audit_list(
                 select(
                     sa_func.count().label("c_all"),
                     sa_func.count().filter(AuditEvent.response_code.like("OK-%")).label("c_pass"),
-                    sa_func.count().filter(AuditEvent.response_code.like("BLOCK-%")).label("c_block"),
+                    sa_func.count()
+                    .filter(AuditEvent.response_code.like("BLOCK-%"))
+                    .label("c_block"),
                 )
                 .select_from(AuditEvent)
                 .where(AuditEvent.path == "/v1/detect/post")
@@ -735,13 +720,17 @@ async def pii_audit_list(
 
             stmt = base.order_by(AuditEvent.occurred_at.desc()).limit(_AUDIT_PAGE_SIZE)
             if tab == "pass":
-                stmt = base.where(AuditEvent.response_code.like("OK-%")).order_by(
-                    AuditEvent.occurred_at.desc()
-                ).limit(_AUDIT_PAGE_SIZE)
+                stmt = (
+                    base.where(AuditEvent.response_code.like("OK-%"))
+                    .order_by(AuditEvent.occurred_at.desc())
+                    .limit(_AUDIT_PAGE_SIZE)
+                )
             elif tab == "block":
-                stmt = base.where(AuditEvent.response_code.like("BLOCK-%")).order_by(
-                    AuditEvent.occurred_at.desc()
-                ).limit(_AUDIT_PAGE_SIZE)
+                stmt = (
+                    base.where(AuditEvent.response_code.like("BLOCK-%"))
+                    .order_by(AuditEvent.occurred_at.desc())
+                    .limit(_AUDIT_PAGE_SIZE)
+                )
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
     except Exception as e:
@@ -776,53 +765,281 @@ async def blocked_redirect(
 
 _DEPENDENCIES: list[dict[str, str]] = [
     # 웹/런타임
-    {"name": "FastAPI", "version": ">=0.115", "category": "Web Framework", "license": "MIT", "purpose": "REST API 프레임워크"},
-    {"name": "Uvicorn", "version": ">=0.32", "category": "Web Framework", "license": "BSD-3-Clause", "purpose": "ASGI 서버"},
-    {"name": "Pydantic", "version": ">=2.9", "category": "Web Framework", "license": "MIT", "purpose": "데이터 검증/직렬화"},
-    {"name": "pydantic-settings", "version": ">=2.6", "category": "Web Framework", "license": "MIT", "purpose": "환경 변수 기반 설정"},
-    {"name": "Jinja2", "version": "transitive", "category": "Web Framework", "license": "BSD-3-Clause", "purpose": "관리자 대시보드 템플릿 렌더링"},
+    {
+        "name": "FastAPI",
+        "version": ">=0.115",
+        "category": "Web Framework",
+        "license": "MIT",
+        "purpose": "REST API 프레임워크",
+    },
+    {
+        "name": "Uvicorn",
+        "version": ">=0.32",
+        "category": "Web Framework",
+        "license": "BSD-3-Clause",
+        "purpose": "ASGI 서버",
+    },
+    {
+        "name": "Pydantic",
+        "version": ">=2.9",
+        "category": "Web Framework",
+        "license": "MIT",
+        "purpose": "데이터 검증/직렬화",
+    },
+    {
+        "name": "pydantic-settings",
+        "version": ">=2.6",
+        "category": "Web Framework",
+        "license": "MIT",
+        "purpose": "환경 변수 기반 설정",
+    },
+    {
+        "name": "Jinja2",
+        "version": "transitive",
+        "category": "Web Framework",
+        "license": "BSD-3-Clause",
+        "purpose": "관리자 대시보드 템플릿 렌더링",
+    },
     # 데이터베이스
-    {"name": "SQLAlchemy", "version": ">=2.0", "category": "Database", "license": "MIT", "purpose": "ORM (asyncio 지원)"},
-    {"name": "asyncpg", "version": ">=0.29", "category": "Database", "license": "Apache-2.0", "purpose": "PostgreSQL 비동기 드라이버"},
-    {"name": "psycopg2-binary", "version": ">=2.9", "category": "Database", "license": "LGPL-3.0", "purpose": "PostgreSQL 동기 드라이버 (Alembic용)"},
-    {"name": "Alembic", "version": ">=1.13", "category": "Database", "license": "MIT", "purpose": "DB 마이그레이션"},
-    {"name": "redis-py", "version": ">=5.0", "category": "Database", "license": "MIT", "purpose": "Redis 클라이언트 (rate limit, nonce)"},
+    {
+        "name": "SQLAlchemy",
+        "version": ">=2.0",
+        "category": "Database",
+        "license": "MIT",
+        "purpose": "ORM (asyncio 지원)",
+    },
+    {
+        "name": "asyncpg",
+        "version": ">=0.29",
+        "category": "Database",
+        "license": "Apache-2.0",
+        "purpose": "PostgreSQL 비동기 드라이버",
+    },
+    {
+        "name": "psycopg2-binary",
+        "version": ">=2.9",
+        "category": "Database",
+        "license": "LGPL-3.0",
+        "purpose": "PostgreSQL 동기 드라이버 (Alembic용)",
+    },
+    {
+        "name": "Alembic",
+        "version": ">=1.13",
+        "category": "Database",
+        "license": "MIT",
+        "purpose": "DB 마이그레이션",
+    },
+    {
+        "name": "redis-py",
+        "version": ">=5.0",
+        "category": "Database",
+        "license": "MIT",
+        "purpose": "Redis 클라이언트 (rate limit, nonce)",
+    },
     # PII 분석 엔진
-    {"name": "Microsoft Presidio (analyzer)", "version": "2.2.362", "category": "PII Engine", "license": "MIT", "purpose": "PII 분석 프레임워크 — 정규식 인식기 등록/실행, decision_process 노출"},
-    {"name": "spaCy", "version": "3.8.14", "category": "PII Engine", "license": "MIT", "purpose": "한국어 NLP 토크나이저 (Phase 9E 이후 NER 미사용)"},
-    {"name": "ko_core_news_lg", "version": "3.8.0", "category": "PII Engine", "license": "MIT", "purpose": "한국어 spaCy 모델 (토크나이저로만 사용)"},
+    {
+        "name": "Microsoft Presidio (analyzer)",
+        "version": "2.2.362",
+        "category": "PII Engine",
+        "license": "MIT",
+        "purpose": "PII 분석 프레임워크 — 정규식 인식기 등록/실행, decision_process 노출",
+    },
+    {
+        "name": "spaCy",
+        "version": "3.8.14",
+        "category": "PII Engine",
+        "license": "MIT",
+        "purpose": "한국어 NLP 토크나이저 (Phase 9E 이후 NER 미사용)",
+    },
+    {
+        "name": "ko_core_news_lg",
+        "version": "3.8.0",
+        "category": "PII Engine",
+        "license": "MIT",
+        "purpose": "한국어 spaCy 모델 (토크나이저로만 사용)",
+    },
     # 파일 추출
-    {"name": "pypdfium2", "version": ">=4.30", "category": "File Extraction", "license": "Apache-2.0/BSD-3-Clause", "purpose": "PDF 텍스트/이미지 추출"},
-    {"name": "pdfplumber", "version": ">=0.11", "category": "File Extraction", "license": "MIT", "purpose": "PDF 표/레이아웃 분석"},
-    {"name": "python-docx", "version": ">=1.1", "category": "File Extraction", "license": "MIT", "purpose": "DOCX 텍스트 추출"},
-    {"name": "lxml", "version": ">=5.0", "category": "File Extraction", "license": "BSD-3-Clause", "purpose": "XML/HWPX 파싱"},
+    {
+        "name": "pypdfium2",
+        "version": ">=4.30",
+        "category": "File Extraction",
+        "license": "Apache-2.0/BSD-3-Clause",
+        "purpose": "PDF 텍스트/이미지 추출",
+    },
+    {
+        "name": "pdfplumber",
+        "version": ">=0.11",
+        "category": "File Extraction",
+        "license": "MIT",
+        "purpose": "PDF 표/레이아웃 분석",
+    },
+    {
+        "name": "python-docx",
+        "version": ">=1.1",
+        "category": "File Extraction",
+        "license": "MIT",
+        "purpose": "DOCX 텍스트 추출",
+    },
+    {
+        "name": "lxml",
+        "version": ">=5.0",
+        "category": "File Extraction",
+        "license": "BSD-3-Clause",
+        "purpose": "XML/HWPX 파싱",
+    },
     # OCR/이미지
-    {"name": "PaddleOCR (선택)", "version": ">=2.8", "category": "OCR", "license": "Apache-2.0", "purpose": "한국어 OCR (paddle 엔진 사용 시)"},
-    {"name": "PaddlePaddle (선택)", "version": ">=2.6", "category": "OCR", "license": "Apache-2.0", "purpose": "PaddleOCR 런타임"},
-    {"name": "Pillow", "version": "transitive", "category": "OCR", "license": "MIT-CMU", "purpose": "OCR 입력 이미지 로딩/전처리"},
+    {
+        "name": "PaddleOCR (선택)",
+        "version": ">=2.8",
+        "category": "OCR",
+        "license": "Apache-2.0",
+        "purpose": "한국어 OCR (paddle 엔진 사용 시)",
+    },
+    {
+        "name": "PaddlePaddle (선택)",
+        "version": ">=2.6",
+        "category": "OCR",
+        "license": "Apache-2.0",
+        "purpose": "PaddleOCR 런타임",
+    },
+    {
+        "name": "Pillow",
+        "version": "transitive",
+        "category": "OCR",
+        "license": "MIT-CMU",
+        "purpose": "OCR 입력 이미지 로딩/전처리",
+    },
     # 보안/통신
-    {"name": "httpx", "version": ">=0.27", "category": "Security/Network", "license": "BSD-3-Clause", "purpose": "비동기 HTTP 클라이언트 (첨부 fetch, 웹훅)"},
-    {"name": "clamd", "version": ">=1.0.2", "category": "Security/Network", "license": "LGPL-3.0", "purpose": "ClamAV 악성코드 스캐너 클라이언트"},
-    {"name": "prometheus-client", "version": ">=0.20", "category": "Observability", "license": "Apache-2.0", "purpose": "Prometheus 메트릭 노출"},
+    {
+        "name": "httpx",
+        "version": ">=0.27",
+        "category": "Security/Network",
+        "license": "BSD-3-Clause",
+        "purpose": "비동기 HTTP 클라이언트 (첨부 fetch, 웹훅)",
+    },
+    {
+        "name": "clamd",
+        "version": ">=1.0.2",
+        "category": "Security/Network",
+        "license": "LGPL-3.0",
+        "purpose": "ClamAV 악성코드 스캐너 클라이언트",
+    },
+    {
+        "name": "prometheus-client",
+        "version": ">=0.20",
+        "category": "Observability",
+        "license": "Apache-2.0",
+        "purpose": "Prometheus 메트릭 노출",
+    },
     # CLI
-    {"name": "Typer", "version": ">=0.12", "category": "CLI", "license": "MIT", "purpose": "API 키 관리 CLI"},
+    {
+        "name": "Typer",
+        "version": ">=0.12",
+        "category": "CLI",
+        "license": "MIT",
+        "purpose": "API 키 관리 CLI",
+    },
     # 외부 시스템
-    {"name": "PostgreSQL", "version": "16", "category": "External System", "license": "PostgreSQL License", "purpose": "주 데이터베이스 (pgcrypto AES 암호화)"},
-    {"name": "Redis", "version": "7", "category": "External System", "license": "RSALv2/SSPL", "purpose": "rate limit + nonce 캐시"},
-    {"name": "ClamAV", "version": "1.3", "category": "External System", "license": "GPL-2.0", "purpose": "첨부 파일 악성코드 스캔"},
-    {"name": "vLLM (Qwen3.5-27B-VL)", "version": "external", "category": "External System", "license": "Apache-2.0", "purpose": "VLM OCR 엔드포인트"},
+    {
+        "name": "PostgreSQL",
+        "version": "16",
+        "category": "External System",
+        "license": "PostgreSQL License",
+        "purpose": "주 데이터베이스 (pgcrypto AES 암호화)",
+    },
+    {
+        "name": "Redis",
+        "version": "7",
+        "category": "External System",
+        "license": "RSALv2/SSPL",
+        "purpose": "rate limit + nonce 캐시",
+    },
+    {
+        "name": "ClamAV",
+        "version": "1.3",
+        "category": "External System",
+        "license": "GPL-2.0",
+        "purpose": "첨부 파일 악성코드 스캔",
+    },
+    {
+        "name": "vLLM (Qwen3.5-27B-VL)",
+        "version": "external",
+        "category": "External System",
+        "license": "Apache-2.0",
+        "purpose": "VLM OCR 엔드포인트",
+    },
     # 개발 도구
-    {"name": "Ruff", "version": ">=0.7", "category": "Dev Tooling", "license": "MIT", "purpose": "린터/포매터"},
-    {"name": "mypy", "version": ">=1.13", "category": "Dev Tooling", "license": "MIT", "purpose": "타입 체커 (strict)"},
-    {"name": "bandit", "version": ">=1.8", "category": "Dev Tooling", "license": "Apache-2.0", "purpose": "보안 정적 분석"},
-    {"name": "pip-audit", "version": ">=2.7", "category": "Dev Tooling", "license": "Apache-2.0", "purpose": "의존성 취약점 스캔"},
-    {"name": "pytest", "version": ">=8.3", "category": "Dev Tooling", "license": "MIT", "purpose": "테스트 러너"},
-    {"name": "pytest-asyncio", "version": ">=0.24", "category": "Dev Tooling", "license": "Apache-2.0", "purpose": "asyncio 테스트 지원"},
-    {"name": "Locust", "version": ">=2.30", "category": "Dev Tooling", "license": "MIT", "purpose": "부하 테스트"},
-    {"name": "pre-commit", "version": ">=4.0", "category": "Dev Tooling", "license": "MIT", "purpose": "pre-commit 훅 관리"},
+    {
+        "name": "Ruff",
+        "version": ">=0.7",
+        "category": "Dev Tooling",
+        "license": "MIT",
+        "purpose": "린터/포매터",
+    },
+    {
+        "name": "mypy",
+        "version": ">=1.13",
+        "category": "Dev Tooling",
+        "license": "MIT",
+        "purpose": "타입 체커 (strict)",
+    },
+    {
+        "name": "bandit",
+        "version": ">=1.8",
+        "category": "Dev Tooling",
+        "license": "Apache-2.0",
+        "purpose": "보안 정적 분석",
+    },
+    {
+        "name": "pip-audit",
+        "version": ">=2.7",
+        "category": "Dev Tooling",
+        "license": "Apache-2.0",
+        "purpose": "의존성 취약점 스캔",
+    },
+    {
+        "name": "pytest",
+        "version": ">=8.3",
+        "category": "Dev Tooling",
+        "license": "MIT",
+        "purpose": "테스트 러너",
+    },
+    {
+        "name": "pytest-asyncio",
+        "version": ">=0.24",
+        "category": "Dev Tooling",
+        "license": "Apache-2.0",
+        "purpose": "asyncio 테스트 지원",
+    },
+    {
+        "name": "Locust",
+        "version": ">=2.30",
+        "category": "Dev Tooling",
+        "license": "MIT",
+        "purpose": "부하 테스트",
+    },
+    {
+        "name": "pre-commit",
+        "version": ">=4.0",
+        "category": "Dev Tooling",
+        "license": "MIT",
+        "purpose": "pre-commit 훅 관리",
+    },
     # 컨테이너/배포
-    {"name": "Docker / Docker Compose", "version": "external", "category": "Deployment", "license": "Apache-2.0", "purpose": "컨테이너 빌드/오케스트레이션"},
-    {"name": "Nginx", "version": "external", "category": "Deployment", "license": "BSD-2-Clause", "purpose": "리버스 프록시 (외부 :443 / 관리자 :8443)"},
+    {
+        "name": "Docker / Docker Compose",
+        "version": "external",
+        "category": "Deployment",
+        "license": "Apache-2.0",
+        "purpose": "컨테이너 빌드/오케스트레이션",
+    },
+    {
+        "name": "Nginx",
+        "version": "external",
+        "category": "Deployment",
+        "license": "BSD-2-Clause",
+        "purpose": "리버스 프록시 (외부 :443 / 관리자 :8443)",
+    },
 ]
 
 
@@ -844,6 +1061,7 @@ async def dependencies_list(
 
 
 # ── PII 검사 테스트 페이지 ────────────────────────────────────────────────
+
 
 @router.get("/test", response_class=HTMLResponse)
 async def test_form(
@@ -867,7 +1085,8 @@ def _verdict_for_code(code: str) -> str:
 
 
 def _collect_explanations(
-    analyzer: Any, text: str,
+    analyzer: Any,
+    text: str,
 ) -> dict[tuple[int, int, str], dict[str, Any]]:
     """분석을 한 번 더 호출해 decision_process 를 수집한다.
 
@@ -990,7 +1209,12 @@ async def test_submit(
                     "strictness": strictness,
                     "author_ip": author_ip,
                 },
-                "form": {"title": title, "body": body, "strictness": strictness, "author_ip": author_ip},
+                "form": {
+                    "title": title,
+                    "body": body,
+                    "strictness": strictness,
+                    "author_ip": author_ip,
+                },
             },
         )
 
@@ -1008,7 +1232,9 @@ async def test_submit(
         "options": {"strictness": strictness},
     }
     body_bytes = _json.dumps(
-        payload, separators=(",", ":"), ensure_ascii=False,
+        payload,
+        separators=(",", ":"),
+        ensure_ascii=False,
     ).encode("utf-8")
     timestamp = str(int(_time.time()))
     nonce = _uuid.uuid4().hex + _uuid.uuid4().hex  # 64 hex chars
@@ -1034,7 +1260,10 @@ async def test_submit(
             transport=transport, base_url="http://dashboard-test"
         ) as client:
             r = await client.post(
-                "/v1/detect/post", content=body_bytes, headers=headers, timeout=60.0,
+                "/v1/detect/post",
+                content=body_bytes,
+                headers=headers,
+                timeout=60.0,
             )
             http_status = r.status_code
             try:
@@ -1052,15 +1281,17 @@ async def test_submit(
     for d in envelope.get("detections", []) or []:
         if not isinstance(d, dict):
             continue
-        detections.append({
-            "field": d.get("field"),
-            "entity_type": d.get("entity_type"),
-            "code": d.get("code"),
-            "score": d.get("score"),
-            "start": d.get("start"),
-            "end": d.get("end"),
-            "verdict": _verdict_for_code(str(d.get("code") or "")),
-        })
+        detections.append(
+            {
+                "field": d.get("field"),
+                "entity_type": d.get("entity_type"),
+                "code": d.get("code"),
+                "score": d.get("score"),
+                "start": d.get("start"),
+                "end": d.get("end"),
+                "verdict": _verdict_for_code(str(d.get("code") or "")),
+            }
+        )
 
     result = {
         "envelope": envelope,
@@ -1088,6 +1319,7 @@ async def test_submit(
 
 
 # ── Audit 상세 보기 ────────────────────────────────────────────────────────
+
 
 def _extract_detections(response_body_text: str | None) -> list[dict[str, Any]]:
     """audit_event.response_body_text 에서 detections 항목을 추출.
@@ -1129,9 +1361,7 @@ async def audit_detail(
     row: AuditEvent | None = None
     try:
         async with sm() as session:
-            result = await session.execute(
-                select(AuditEvent).where(AuditEvent.id == event_id)
-            )
+            result = await session.execute(select(AuditEvent).where(AuditEvent.id == event_id))
             row = result.scalar_one_or_none()
     except Exception as e:
         logger.warning("audit_detail query failed: %s", e)
@@ -1155,6 +1385,7 @@ async def audit_detail(
 
 # ── 시스템 설정 ────────────────────────────────────────────────────────────
 
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(
     request: Request,
@@ -1162,6 +1393,7 @@ async def settings_page(
 ) -> Response:
     """시스템 설정 페이지."""
     from app.core import system_settings as ss
+
     return templates.TemplateResponse(
         request,
         "admin/settings.html",
@@ -1215,14 +1447,13 @@ async def settings_audit_detail(
 ) -> Response:
     """audit_detail_enabled 토글 처리."""
     from app.core import system_settings as ss
+
     ss.set_value("audit_detail_enabled", enabled == "on")
     return RedirectResponse(url="/admin/settings", status_code=303)
 
 
 # ── Exception handler installed at app level ──────────────────────────────
-async def dashboard_auth_exception_handler(
-    _request: Request, exc: Exception
-) -> Response:
+async def dashboard_auth_exception_handler(_request: Request, exc: Exception) -> Response:
     """Map ``DashboardAuthError`` into the carried response.
 
     Signature uses ``Exception`` so it matches Starlette's

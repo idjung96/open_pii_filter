@@ -146,18 +146,20 @@ def inspect_all_candidates() -> list[dict[str, object]]:
         patterns: list[dict[str, object]] = []
         for p in getattr(r, "patterns", []) or []:
             patterns.append({"name": p.name, "regex": p.regex, "score": p.score})
-        out.append({
-            "name": getattr(r, "name", cls),
-            "class": cls,
-            "module": type(r).__module__,
-            "source": _classify_source(r),
-            "supported_entities": list(getattr(r, "supported_entities", [])),
-            "supported_language": getattr(r, "supported_language", None),
-            "context_words": list(getattr(r, "context", []) or []),
-            "patterns": patterns,
-            "enabled": cls not in disabled,
-            "has_override": has_override(cls),
-        })
+        out.append(
+            {
+                "name": getattr(r, "name", cls),
+                "class": cls,
+                "module": type(r).__module__,
+                "source": _classify_source(r),
+                "supported_entities": list(getattr(r, "supported_entities", [])),
+                "supported_language": getattr(r, "supported_language", None),
+                "context_words": list(getattr(r, "context", []) or []),
+                "patterns": patterns,
+                "enabled": cls not in disabled,
+                "has_override": has_override(cls),
+            }
+        )
     return out
 
 
@@ -226,19 +228,23 @@ def inspect_recognizers(engine: AnalyzerEngine) -> list[dict[str, object]]:
     for r in engine.registry.recognizers:
         patterns: list[dict[str, object]] = []
         for p in getattr(r, "patterns", []) or []:
-            patterns.append({
-                "name": p.name,
-                "regex": p.regex,
-                "score": p.score,
-            })
-        out.append({
-            "name": getattr(r, "name", type(r).__name__),
-            "source": _classify_source(r),
-            "supported_entities": list(getattr(r, "supported_entities", [])),
-            "supported_language": getattr(r, "supported_language", None),
-            "context_words": list(getattr(r, "context", []) or []),
-            "patterns": patterns,
-            "class": type(r).__name__,
-            "module": type(r).__module__,
-        })
+            patterns.append(
+                {
+                    "name": p.name,
+                    "regex": p.regex,
+                    "score": p.score,
+                }
+            )
+        out.append(
+            {
+                "name": getattr(r, "name", type(r).__name__),
+                "source": _classify_source(r),
+                "supported_entities": list(getattr(r, "supported_entities", [])),
+                "supported_language": getattr(r, "supported_language", None),
+                "context_words": list(getattr(r, "context", []) or []),
+                "patterns": patterns,
+                "class": type(r).__name__,
+                "module": type(r).__module__,
+            }
+        )
     return out

@@ -38,14 +38,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PDF_MIMES = frozenset({"application/pdf"})
-DOCX_MIMES = frozenset({
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-})
-HWPX_MIMES = frozenset({
-    "application/hwp+zip",
-    "application/x-hwpx",
-    "application/haansofthwpx",
-})
+DOCX_MIMES = frozenset(
+    {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+)
+HWPX_MIMES = frozenset(
+    {
+        "application/hwp+zip",
+        "application/x-hwpx",
+        "application/haansofthwpx",
+    }
+)
 TEXT_MIMES = frozenset({"text/plain"})
 
 
@@ -89,9 +93,7 @@ async def render_pdf_pages(data: bytes, filename: str) -> list[PILImage]:
     return await asyncio.to_thread(_render_pdf_pages_sync, data, filename)
 
 
-async def extract_image(
-    data: bytes, attachment: Attachment
-) -> tuple[OCRResult, PILImage]:
+async def extract_image(data: bytes, attachment: Attachment) -> tuple[OCRResult, PILImage]:
     """Run OCR on an image attachment and also return the source PIL image.
 
     The PIL image is needed by the orchestrator to draw masking
@@ -109,9 +111,7 @@ async def extract_image(
     return result, image
 
 
-async def dispatch_extract(
-    data: bytes, attachment: Attachment
-) -> tuple[str, bool]:
+async def dispatch_extract(data: bytes, attachment: Attachment) -> tuple[str, bool]:
     """Extract plaintext from ``data`` based on ``attachment.mime_type``.
 
     Returns:

@@ -126,9 +126,7 @@ async def test_t5_5_landscape_no_text() -> None:
         (len(seg) for seg in __import__("re").findall(r"\d+", digits)),
         default=0,
     )
-    assert long_run < 11, (
-        f"landscape image hallucinated digit run: {res.text!r}"
-    )
+    assert long_run < 11, f"landscape image hallucinated digit run: {res.text!r}"
 
 
 # ── T5.6: multi-page TIFF → all pages OCR'd ──────────────────────────────
@@ -230,13 +228,17 @@ async def test_ocr_image_uses_vlm_when_engine_paddle_but_missing(
 
     monkeypatch.setattr(
         "app.config.get_settings",
-        lambda: type("S", (), {
-            "ocr_engine": "paddle",
-            "vlm_endpoint": "http://x/v1",
-            "vlm_model_id": "x",
-            "vlm_api_key": "",
-            "ocr_request_timeout_seconds": 1.0,
-        })(),
+        lambda: type(
+            "S",
+            (),
+            {
+                "ocr_engine": "paddle",
+                "vlm_endpoint": "http://x/v1",
+                "vlm_model_id": "x",
+                "vlm_api_key": "",
+                "ocr_request_timeout_seconds": 1.0,
+            },
+        )(),
     )
 
     fake = AsyncMock(return_value=_OCRResult(text="ok", boxes=[], width=10, height=10))
@@ -253,15 +255,12 @@ async def test_ocr_image_uses_vlm_when_engine_paddle_but_missing(
 
 async def test_concurrent_ocr_image_requests_dont_share_state() -> None:
     """Smoke check that multiple concurrent calls don't share a global VLM client."""
+
     # Mock the network so we can fire 5 in parallel.
     def handler(_req: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json={
-                "choices": [
-                    {"message": {"content": '{"text": "ok", "blocks": []}'}}
-                ]
-            },
+            json={"choices": [{"message": {"content": '{"text": "ok", "blocks": []}'}}]},
         )
 
     transport = httpx.MockTransport(handler)
@@ -277,7 +276,7 @@ async def test_concurrent_ocr_image_requests_dont_share_state() -> None:
         img_buf = __import__("io").BytesIO()
         Image.new("RGB", (50, 50), (255, 255, 255)).save(img_buf, format="PNG")
         data = img_buf.getvalue()
-        results = await asyncio.gather(*[
-            ocr_image(data, f"img{i}.png", "image/png") for i in range(5)
-        ])
+        results = await asyncio.gather(
+            *[ocr_image(data, f"img{i}.png", "image/png") for i in range(5)]
+        )
     assert all(r.text == "ok" for r in results)

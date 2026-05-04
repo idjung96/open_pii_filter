@@ -59,7 +59,8 @@ class AnalyzerCache:
             return self._engine
 
     async def get_shadow(
-        self, session: AsyncSession  # noqa: ARG002 — back-compat shim
+        self,
+        session: AsyncSession,  # noqa: ARG002 — back-compat shim
     ) -> AnalyzerEngine | None:
         """Phase 9E — shadow analyzer 폐기. 항상 ``None`` 을 반환한다.
 
@@ -81,8 +82,7 @@ class AnalyzerCache:
         self._reload_count += 1
         logger.info(
             "analyzer rebuilt",
-            extra={"build_seconds": round(elapsed, 3),
-                   "reload_count": self._reload_count},
+            extra={"build_seconds": round(elapsed, 3), "reload_count": self._reload_count},
         )
 
     @property

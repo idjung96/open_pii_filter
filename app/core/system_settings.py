@@ -3,6 +3,7 @@
 DB 스키마 변경 없이 대시보드에서 설정을 토글할 수 있다.
 파일: data/system_settings.json (gitignored)
 """
+
 from __future__ import annotations
 
 import json
@@ -42,6 +43,4 @@ def set_value(key: str, value: object) -> None:
         cur = get_settings_dict()
         cur[key] = value
         _FILE.parent.mkdir(parents=True, exist_ok=True)
-        _FILE.write_text(
-            json.dumps(cur, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        _FILE.write_text(json.dumps(cur, indent=2, ensure_ascii=False), encoding="utf-8")

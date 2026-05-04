@@ -65,8 +65,8 @@ return {allowed, retry_after, tokens}
 @dataclass(frozen=True)
 class RateLimitOutcome:
     allowed: bool
-    retry_after: int      # seconds; 0 when allowed
-    remaining: float      # tokens left in the bucket
+    retry_after: int  # seconds; 0 when allowed
+    remaining: float  # tokens left in the bucket
 
 
 class RateLimiter:
@@ -130,9 +130,7 @@ _REDIS: redis_async.Redis | None = None
 def get_redis() -> redis_async.Redis:
     global _REDIS
     if _REDIS is None:
-        _REDIS = redis_async.from_url(
-            get_settings().redis_url, decode_responses=True
-        )
+        _REDIS = redis_async.from_url(get_settings().redis_url, decode_responses=True)
     return _REDIS
 
 
@@ -152,7 +150,9 @@ def reset_for_tests() -> None:
 
 # Helper for retry_after seconds — exposed for tests/middleware
 def seconds_until_refill(
-    *, capacity: int, rate_per_minute: int  # noqa: ARG001
+    *,
+    capacity: int,
+    rate_per_minute: int,  # noqa: ARG001
 ) -> int:
     """How long a fully drained bucket needs to allow at least one token."""
     rate = rate_per_minute / 60

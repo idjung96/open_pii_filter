@@ -29,13 +29,9 @@ async def nonce_vacuum_loop(
     while True:
         try:
             async with sm() as session:
-                deleted = await vacuum_old_nonces(
-                    session, retention_seconds=retention_seconds
-                )
+                deleted = await vacuum_old_nonces(session, retention_seconds=retention_seconds)
                 if deleted:
-                    logger.info(
-                        "nonce_vacuum: deleted %d expired nonces", deleted
-                    )
+                    logger.info("nonce_vacuum: deleted %d expired nonces", deleted)
         except asyncio.CancelledError:
             raise
         except Exception:

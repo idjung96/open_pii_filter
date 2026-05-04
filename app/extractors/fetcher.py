@@ -33,9 +33,7 @@ class ExtractionError(Exception):
     untouched.
     """
 
-    def __init__(
-        self, code: str, *, filename: str, detail: str | None = None
-    ) -> None:
+    def __init__(self, code: str, *, filename: str, detail: str | None = None) -> None:
         super().__init__(f"{code} {filename}: {detail or ''}")
         self.code = code
         self.filename = filename

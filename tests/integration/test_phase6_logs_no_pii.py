@@ -47,17 +47,14 @@ def _assert_no_pii_in_records(records: list[logging.LogRecord], *forbidden: str)
     blob = "\n".join(rendered)
     for needle in forbidden:
         assert needle not in blob, (
-            f"PII leak: {needle!r} appears in {len(records)} log record(s):\n"
-            f"{blob[:2000]}"
+            f"PII leak: {needle!r} appears in {len(records)} log record(s):\n{blob[:2000]}"
         )
 
 
 # ── Unit-level filter tests ──────────────────────────────────────────────
 def test_filter_scrubs_rrn() -> None:
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, "user RRN=010101-1234567", None, None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, "user RRN=010101-1234567", None, None)
     flt.filter(rec)
     assert "010101-1234567" not in rec.msg
     assert "[REDACTED-RRN]" in rec.msg
@@ -65,9 +62,7 @@ def test_filter_scrubs_rrn() -> None:
 
 def test_filter_scrubs_phone() -> None:
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, "phone 010-0000-1234", None, None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, "phone 010-0000-1234", None, None)
     flt.filter(rec)
     assert "010-0000-1234" not in rec.msg
     assert "[REDACTED-PHONE]" in rec.msg
@@ -75,18 +70,14 @@ def test_filter_scrubs_phone() -> None:
 
 def test_filter_scrubs_email() -> None:
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, "to alice@example.com", None, None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, "to alice@example.com", None, None)
     flt.filter(rec)
     assert "alice@example.com" not in rec.msg
 
 
 def test_filter_scrubs_card() -> None:
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, "card 4111-1111-1111-1111", None, None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, "card 4111-1111-1111-1111", None, None)
     flt.filter(rec)
     assert "4111-1111-1111-1111" not in rec.msg
     assert "[REDACTED-CARD]" in rec.msg
@@ -95,7 +86,10 @@ def test_filter_scrubs_card() -> None:
 def test_filter_scrubs_args_tuple() -> None:
     flt = PIIScrubFilter()
     rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0,
+        "x",
+        logging.INFO,
+        "p",
+        0,
         "name=%s phone=%s",
         ("홍길동", "010-9876-5432"),
         None,
@@ -106,7 +100,8 @@ def test_filter_scrubs_args_tuple() -> None:
 
 # ── Endpoint-level scrub assertions ──────────────────────────────────────
 async def test_success_path_logs_have_no_pii(
-    client: AsyncClient, caplog: pytest.LogCaptureFixture,
+    client: AsyncClient,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Case B: WARN-level body is logged but no plaintext PII leaks."""
     g = SyntheticPIIGenerator(seed=42)
@@ -131,7 +126,8 @@ async def test_success_path_logs_have_no_pii(
 
 
 async def test_validation_error_path_logs_have_no_pii(
-    client: AsyncClient, caplog: pytest.LogCaptureFixture,
+    client: AsyncClient,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     g = SyntheticPIIGenerator(seed=43)
     rrn = g.gen_rrn(valid=True)
@@ -177,18 +173,14 @@ async def test_exception_path_logs_have_no_pii(
 
 def test_filter_does_not_break_records_without_pii() -> None:
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, "ordinary message %d", (42,), None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, "ordinary message %d", (42,), None)
     assert flt.filter(rec) is True
     assert rec.getMessage() == "ordinary message 42"
 
 
 def test_filter_handles_non_string_msg() -> None:
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, {"k": "v"}, None, None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, {"k": "v"}, None, None)
     assert flt.filter(rec) is True
 
 
@@ -198,9 +190,7 @@ def test_phone_pattern_strict() -> None:
     A 4-digit zip-like number alone shouldn't trigger a PHONE redaction.
     """
     flt = PIIScrubFilter()
-    rec = logging.LogRecord(
-        "x", logging.INFO, "p", 0, "code=1234 ok", None, None
-    )
+    rec = logging.LogRecord("x", logging.INFO, "p", 0, "code=1234 ok", None, None)
     flt.filter(rec)
     assert "1234" in rec.msg
     assert not re.search(r"\[REDACTED-PHONE\]", rec.msg)

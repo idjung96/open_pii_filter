@@ -79,20 +79,14 @@ def observe_http(
     the request flow. The middleware calls this from a ``finally`` block.
     """
     with contextlib.suppress(Exception):
-        HTTP_REQUESTS_TOTAL.labels(
-            method=method, path=path, response_code=response_code
-        ).inc()
-        HTTP_REQUEST_DURATION_SECONDS.labels(
-            method=method, path=path
-        ).observe(duration_seconds)
+        HTTP_REQUESTS_TOTAL.labels(method=method, path=path, response_code=response_code).inc()
+        HTTP_REQUEST_DURATION_SECONDS.labels(method=method, path=path).observe(duration_seconds)
 
 
 def observe_detection(*, entity_type: str, verdict: str) -> None:
     """Bump the PII-detections counter for one (type, verdict) pair."""
     with contextlib.suppress(Exception):
-        PII_DETECTIONS_TOTAL.labels(
-            entity_type=entity_type, verdict=verdict
-        ).inc()
+        PII_DETECTIONS_TOTAL.labels(entity_type=entity_type, verdict=verdict).inc()
 
 
 def observe_extraction_job(*, status: str) -> None:

@@ -62,9 +62,7 @@ async def client() -> AsyncIterator[AsyncClient]:
     """
     app.dependency_overrides[require_auth] = _stub_caller
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             yield c
     finally:
         app.dependency_overrides.pop(require_auth, None)
@@ -73,9 +71,7 @@ async def client() -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 async def client_anon() -> AsyncIterator[AsyncClient]:
     """Client without the auth override — exercises the real dependency."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
@@ -99,9 +95,7 @@ async def db_session() -> AsyncIterator[AsyncSession]:
 
     from app.config import get_settings
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     try:
         async with engine.connect() as conn:
             trans = await conn.begin()

@@ -33,20 +33,14 @@ def _extract_sync(data: bytes, filename: str) -> str:
     import docx
 
     if _is_encrypted_ooxml(data):
-        raise ExtractionError(
-            "REQ-4051", filename=filename, detail="password-protected"
-        )
+        raise ExtractionError("REQ-4051", filename=filename, detail="password-protected")
 
     try:
         document = docx.Document(io.BytesIO(data))
     except zipfile.BadZipFile as e:
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=f"bad zip: {e}"
-        ) from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=f"bad zip: {e}") from e
     except Exception as e:
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=str(e)
-        ) from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=str(e)) from e
 
     parts: list[str] = []
     try:
@@ -59,9 +53,7 @@ def _extract_sync(data: bytes, filename: str) -> str:
                     if cell.text:
                         parts.append(cell.text)
     except Exception as e:
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=f"walk failed: {e}"
-        ) from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=f"walk failed: {e}") from e
 
     return "\n".join(parts)
 

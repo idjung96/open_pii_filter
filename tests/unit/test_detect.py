@@ -66,9 +66,7 @@ async def test_t1_18_block_no_attachments(client: AsyncClient) -> None:
 
 # ── T1.19: body PASS + no attachments → HTTP 200 + PASS ───────────────────
 async def test_t1_19_pass_no_attachments(client: AsyncClient) -> None:
-    payload = _payload(
-        body="안녕하세요. 도서관 운영 시간이 어떻게 되는지 문의드립니다."
-    )
+    payload = _payload(body="안녕하세요. 도서관 운영 시간이 어떻게 되는지 문의드립니다.")
     r = await client.post("/v1/detect/post", json=payload)
     assert r.status_code == 200
     data = r.json()
@@ -110,9 +108,7 @@ async def test_t1_22_multi_block_uses_2008(client: AsyncClient) -> None:
     g = SyntheticPIIGenerator(seed=109)
     rrn = g.gen_rrn(valid=True)
     card = g.gen_credit_card(brand="visa")
-    payload = _payload(
-        body=f"주민등록번호 {rrn}, 카드번호 {card} 입니다."
-    )
+    payload = _payload(body=f"주민등록번호 {rrn}, 카드번호 {card} 입니다.")
 
     r = await client.post("/v1/detect/post", json=payload)
     assert r.status_code == 200
@@ -173,6 +169,7 @@ async def test_t1_28_processing_timeout(
     def slow_analyze(text: str, *, field: str, strictness: str) -> list[Any]:
         # Block longer than the 5 s timeout to trip asyncio.timeout
         import time as _t
+
         _t.sleep(6.0)
         return []
 

@@ -58,9 +58,7 @@ async def reload_api_ip_callers(session: AsyncSession) -> int:
             if cidr
         ]
         _cache = rows
-        logger.info(
-            "api_ip_caller_cache reloaded", extra={"count": len(rows)}
-        )
+        logger.info("api_ip_caller_cache reloaded", extra={"count": len(rows)})
         return len(rows)
     except Exception as e:
         logger.warning("api_ip_caller_cache reload failed: %s", e)

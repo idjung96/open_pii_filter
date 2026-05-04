@@ -86,8 +86,7 @@ class PolicyCache:
                 self._reload_count += 1
                 logger.info(
                     "policy cache rebuilt",
-                    extra={"row_count": len(self._policies),
-                           "reload_count": self._reload_count},
+                    extra={"row_count": len(self._policies), "reload_count": self._reload_count},
                 )
             return self._policies
 
@@ -113,10 +112,7 @@ def reset_policy_cache_for_tests() -> None:
 
 # ── Resolver ──────────────────────────────────────────────────────────────
 def _match(policy: PiiPolicy, *, entity_type: str, score: float) -> bool:
-    return (
-        policy.entity_type == entity_type
-        and policy.score_min <= score <= policy.score_max
-    )
+    return policy.entity_type == entity_type and policy.score_min <= score <= policy.score_max
 
 
 def resolve_action(

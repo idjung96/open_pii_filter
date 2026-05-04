@@ -21,11 +21,12 @@ from pathlib import Path
 from typing import Any
 
 KEYS_FILE = Path(__file__).parent.parent / "keys" / "api_keys.json"
-KEY_ID_BYTES = 16   # 32 hex chars  (app/security/api_key.py 와 동일)
-SECRET_BYTES = 32   # 64 hex chars
+KEY_ID_BYTES = 16  # 32 hex chars  (app/security/api_key.py 와 동일)
+SECRET_BYTES = 32  # 64 hex chars
 
 
 # ── JSON 헬퍼 ──────────────────────────────────────────────────────────────
+
 
 def _load() -> dict[str, Any]:
     if not KEYS_FILE.exists():
@@ -54,6 +55,7 @@ def _find(data: dict[str, Any], key_id: str) -> dict[str, Any] | None:
 
 
 # ── 서브커맨드 ──────────────────────────────────────────────────────────────
+
 
 def cmd_issue(name: str, ip_allowlist: list[str] | None = None) -> None:
     """새 키를 발급하고 JSON에 저장합니다. secret은 이 시점에만 출력됩니다."""
@@ -93,12 +95,14 @@ def cmd_list() -> None:
     print(fmt.format("key_id", "name", "enabled", "created_at"))
     print("-" * 90)
     for k in data["keys"]:
-        print(fmt.format(
-            k["key_id"],
-            k["name"][:23],
-            "Y" if k["enabled"] else "n",
-            k["created_at"],
-        ))
+        print(
+            fmt.format(
+                k["key_id"],
+                k["name"][:23],
+                "Y" if k["enabled"] else "n",
+                k["created_at"],
+            )
+        )
 
 
 def cmd_disable(key_id: str) -> None:
@@ -176,6 +180,7 @@ def cmd_load_db() -> None:
 
 # ── 진입점 ─────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     args = sys.argv[1:]
     if not args:
@@ -190,7 +195,8 @@ def main() -> None:
         i = 1
         while i < len(args):
             if args[i] == "--name" and i + 1 < len(args):
-                name = args[i + 1]; i += 2
+                name = args[i + 1]
+                i += 2
             elif args[i] == "--ip" and i + 1 < len(args):
                 ip_list = [c.strip() for c in args[i + 1].split(",") if c.strip()]
                 i += 2

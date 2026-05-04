@@ -64,25 +64,17 @@ def _extract_sync(data: bytes, filename: str) -> tuple[str, bool]:
     # encrypted PDFs; checking the trailer for /Encrypt is the most
     # reliable cross-parser detector.
     if _has_encrypt_dict(data):
-        raise ExtractionError(
-            "REQ-4051", filename=filename, detail="password-protected"
-        )
+        raise ExtractionError("REQ-4051", filename=filename, detail="password-protected")
 
     # ── Page-count check via pypdfium2 (cheap; doesn't render) ────────
     try:
         pdf = pypdfium2.PdfDocument(io.BytesIO(data))
     except pypdfium2.PdfiumError as e:
         if _looks_encrypted(e):
-            raise ExtractionError(
-                "REQ-4051", filename=filename, detail="password-protected"
-            ) from e
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=str(e)
-        ) from e
+            raise ExtractionError("REQ-4051", filename=filename, detail="password-protected") from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=str(e)) from e
     except Exception as e:
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=str(e)
-        ) from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=str(e)) from e
 
     try:
         page_count = len(pdf)
@@ -107,15 +99,11 @@ def _extract_sync(data: bytes, filename: str) -> tuple[str, bool]:
                     text_chunks.append(t)
     except Exception as e:
         if _looks_encrypted(e):
-            raise ExtractionError(
-                "REQ-4051", filename=filename, detail="password-protected"
-            ) from e
+            raise ExtractionError("REQ-4051", filename=filename, detail="password-protected") from e
         # Fall back to pypdfium2 instead of failing outright; some PDFs
         # break pdfplumber's layout heuristics but render fine via
         # pdfium's text API.
-        logger.warning(
-            "pdfplumber failed for %s (%s); trying pypdfium2", filename, e
-        )
+        logger.warning("pdfplumber failed for %s (%s); trying pypdfium2", filename, e)
 
     text = "\n".join(text_chunks).strip()
     if text:
@@ -139,12 +127,8 @@ def _extract_sync(data: bytes, filename: str) -> tuple[str, bool]:
             pdf.close()
     except Exception as e:
         if _looks_encrypted(e):
-            raise ExtractionError(
-                "REQ-4051", filename=filename, detail="password-protected"
-            ) from e
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=str(e)
-        ) from e
+            raise ExtractionError("REQ-4051", filename=filename, detail="password-protected") from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=str(e)) from e
 
     if text:
         return text, False

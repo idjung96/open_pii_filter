@@ -22,9 +22,7 @@ if TYPE_CHECKING:
     pass
 
 
-def _attachment(
-    *, filename: str = "scan.pdf", mime_type: str = "application/pdf"
-) -> Attachment:
+def _attachment(*, filename: str = "scan.pdf", mime_type: str = "application/pdf") -> Attachment:
     return Attachment(
         attachment_id="att_001",
         filename=filename,
@@ -53,25 +51,21 @@ async def test_scan_pdf_routes_through_ocr(
     async def fake_render_pages(_data: bytes, _filename: str) -> list:
         return fake_pages
 
-    fake_ocr = AsyncMock(return_value=OCRResult(
-        text="page1 RRN 900101-1234567\npage2 phone 010-0000-1234",
-        boxes=[
-            OCRBox(0, 0, 50, 20, "RRN 900101-1234567"),
-            OCRBox(0, 100, 50, 120, "phone 010-0000-1234"),
-        ],
-        width=200,
-        height=200,
-    ))
+    fake_ocr = AsyncMock(
+        return_value=OCRResult(
+            text="page1 RRN 900101-1234567\npage2 phone 010-0000-1234",
+            boxes=[
+                OCRBox(0, 0, 50, 20, "RRN 900101-1234567"),
+                OCRBox(0, 100, 50, 120, "phone 010-0000-1234"),
+            ],
+            width=200,
+            height=200,
+        )
+    )
 
-    monkeypatch.setattr(
-        "app.extractors.dispatcher.extract_pdf", fake_extract_pdf
-    )
-    monkeypatch.setattr(
-        "app.extractors.dispatcher.render_pdf_pages", fake_render_pages
-    )
-    monkeypatch.setattr(
-        "app.extractors.dispatcher.ocr_pil_pages", fake_ocr
-    )
+    monkeypatch.setattr("app.extractors.dispatcher.extract_pdf", fake_extract_pdf)
+    monkeypatch.setattr("app.extractors.dispatcher.render_pdf_pages", fake_render_pages)
+    monkeypatch.setattr("app.extractors.dispatcher.ocr_pil_pages", fake_ocr)
 
     text, needs_ocr = await dispatch_extract(b"%PDF-fake", _attachment())
     assert needs_ocr is True
@@ -87,15 +81,9 @@ async def test_text_pdf_skips_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
 
     fake_render = AsyncMock()
     fake_ocr = AsyncMock()
-    monkeypatch.setattr(
-        "app.extractors.dispatcher.extract_pdf", fake_extract_pdf
-    )
-    monkeypatch.setattr(
-        "app.extractors.dispatcher.render_pdf_pages", fake_render
-    )
-    monkeypatch.setattr(
-        "app.extractors.dispatcher.ocr_pil_pages", fake_ocr
-    )
+    monkeypatch.setattr("app.extractors.dispatcher.extract_pdf", fake_extract_pdf)
+    monkeypatch.setattr("app.extractors.dispatcher.render_pdf_pages", fake_render)
+    monkeypatch.setattr("app.extractors.dispatcher.ocr_pil_pages", fake_ocr)
 
     text, needs_ocr = await dispatch_extract(b"%PDF-fake", _attachment())
     assert needs_ocr is False

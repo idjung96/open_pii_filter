@@ -103,9 +103,7 @@ def test_error_developer_message_rendered_with_vars() -> None:
 # ── T1.16: user_message static check ───────────────────────────────────────
 def test_no_user_message_leaks_internal_details() -> None:
     violations = audit_all_user_messages()
-    assert not violations, (
-        f"user_message templates leak internal details: {violations}"
-    )
+    assert not violations, f"user_message templates leak internal details: {violations}"
 
 
 def test_safety_check_catches_known_leak() -> None:
@@ -140,8 +138,15 @@ def test_response_schema_fields_match_spec() -> None:
 
     # §2.3 common envelope (Phase 9D 이후 'masked' 키 제거).
     for k in (
-        "request_id", "verdict", "code", "system_message", "user_message",
-        "developer_message", "detections", "processed_at", "processing_ms",
+        "request_id",
+        "verdict",
+        "code",
+        "system_message",
+        "user_message",
+        "developer_message",
+        "detections",
+        "processed_at",
+        "processing_ms",
     ):
         assert k in dumped, f"missing field: {k}"
     assert "masked" not in dumped
@@ -156,23 +161,62 @@ def test_response_schema_fields_match_spec() -> None:
 def test_code_catalog_covers_spec() -> None:
     required = {
         # PASS
-        "OK-0000", "OK-0001",
+        "OK-0000",
+        "OK-0001",
         # WARN
-        "WARN-1001", "WARN-1002", "WARN-1003", "WARN-1004", "WARN-1005", "WARN-1099",
+        "WARN-1001",
+        "WARN-1002",
+        "WARN-1003",
+        "WARN-1004",
+        "WARN-1005",
+        "WARN-1099",
         # BLOCK
-        "BLOCK-2001", "BLOCK-2002", "BLOCK-2003", "BLOCK-2004", "BLOCK-2005",
-        "BLOCK-2006", "BLOCK-2007", "BLOCK-2008", "BLOCK-2010", "BLOCK-2011",
-        "BLOCK-2012", "BLOCK-2099",
+        "BLOCK-2001",
+        "BLOCK-2002",
+        "BLOCK-2003",
+        "BLOCK-2004",
+        "BLOCK-2005",
+        "BLOCK-2006",
+        "BLOCK-2007",
+        "BLOCK-2008",
+        "BLOCK-2010",
+        "BLOCK-2011",
+        "BLOCK-2012",
+        "BLOCK-2099",
         # ACK
-        "ACK-3001", "ACK-3002",
+        "ACK-3001",
+        "ACK-3002",
         # REQ
-        "REQ-4001", "REQ-4002", "REQ-4003", "REQ-4004", "REQ-4005",
-        "REQ-4010", "REQ-4011", "REQ-4012", "REQ-4013", "REQ-4014", "REQ-4015",
-        "REQ-4020", "REQ-4030", "REQ-4031", "REQ-4032", "REQ-4033",
-        "REQ-4040", "REQ-4041", "REQ-4042", "REQ-4043", "REQ-4050", "REQ-4051",
+        "REQ-4001",
+        "REQ-4002",
+        "REQ-4003",
+        "REQ-4004",
+        "REQ-4005",
+        "REQ-4010",
+        "REQ-4011",
+        "REQ-4012",
+        "REQ-4013",
+        "REQ-4014",
+        "REQ-4015",
+        "REQ-4020",
+        "REQ-4030",
+        "REQ-4031",
+        "REQ-4032",
+        "REQ-4033",
+        "REQ-4040",
+        "REQ-4041",
+        "REQ-4042",
+        "REQ-4043",
+        "REQ-4050",
+        "REQ-4051",
         # SVR
-        "SVR-5001", "SVR-5002", "SVR-5003", "SVR-5004", "SVR-5005",
-        "SVR-5006", "SVR-5099",
+        "SVR-5001",
+        "SVR-5002",
+        "SVR-5003",
+        "SVR-5004",
+        "SVR-5005",
+        "SVR-5006",
+        "SVR-5099",
     }
     missing = required - CODES.keys()
     assert not missing, f"missing codes from §2.4: {sorted(missing)}"

@@ -29,7 +29,7 @@ async def test_q2_ip_burst_after_failures_throttles(
     for _ in range(12):
         resp = await client_anon.post(
             "/v1/detect/post",
-            content=b'{}',
+            content=b"{}",
             headers={
                 "X-API-Key": "k_does_not_exist",
                 "X-Timestamp": str(int(time.time())),

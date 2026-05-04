@@ -48,14 +48,16 @@ logger = logging.getLogger(__name__)
 MAX_OCR_IMAGE_BYTES = 100 * 1024 * 1024  # 100 MB
 MAX_OCR_DIMENSION = 16384
 
-IMAGE_MIME_TYPES = frozenset({
-    "image/jpeg",
-    "image/png",
-    "image/tiff",
-    "image/bmp",
-    "image/webp",
-    "image/gif",
-})
+IMAGE_MIME_TYPES = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/tiff",
+        "image/bmp",
+        "image/webp",
+        "image/gif",
+    }
+)
 
 
 def _open_image(data: bytes, filename: str) -> PILImage:
@@ -80,9 +82,7 @@ def _normalise(image: PILImage) -> PILImage:
     """Apply EXIF rotation + downscale-to-MAX_OCR_DIMENSION (preserve aspect)."""
     transposed: PILImage = ImageOps.exif_transpose(image)
     if transposed.width > MAX_OCR_DIMENSION or transposed.height > MAX_OCR_DIMENSION:
-        transposed.thumbnail(
-            (MAX_OCR_DIMENSION, MAX_OCR_DIMENSION), Image.Resampling.LANCZOS
-        )
+        transposed.thumbnail((MAX_OCR_DIMENSION, MAX_OCR_DIMENSION), Image.Resampling.LANCZOS)
     # Strip alpha so JPEG-style models don't see RGBA holes.
     if transposed.mode not in {"RGB", "L"}:
         transposed = transposed.convert("RGB")
@@ -103,22 +103,18 @@ async def _run_engine(image: PILImage, *, filename: str) -> OCRResult:
             except Exception as e:
                 logger.warning(
                     "paddle OCR failed for %s (%s); falling back to VLM",
-                    filename, e,
+                    filename,
+                    e,
                 )
         else:
-            logger.warning(
-                "paddle OCR requested but paddleocr not installed; "
-                "falling back to VLM"
-            )
+            logger.warning("paddle OCR requested but paddleocr not installed; falling back to VLM")
         # Fall through to VLM.
 
     # Default / fallback path: VLM.
     try:
         return await vlm_ocr(image, settings=settings)
     except VLMError as e:
-        raise ExtractionError(
-            "SVR-5004", filename=filename, detail=f"VLM unavailable: {e}"
-        ) from e
+        raise ExtractionError("SVR-5004", filename=filename, detail=f"VLM unavailable: {e}") from e
 
 
 def _shift_boxes(boxes: list[OCRBox], dy: int) -> list[OCRBox]:

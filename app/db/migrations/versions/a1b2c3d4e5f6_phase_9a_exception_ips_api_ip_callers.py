@@ -14,6 +14,7 @@ Two new tables:
   a row, the request is authenticated as ``ip:<cidr>`` and per-row
   rate limits apply.
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -23,103 +24,103 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, Sequence[str], None] = '9f3a7c2e1b41'
+revision: str = "a1b2c3d4e5f6"
+down_revision: Union[str, Sequence[str], None] = "9f3a7c2e1b41"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     op.create_table(
-        'exception_ips',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('cidr', sa.String(length=50), nullable=False),
+        "exception_ips",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("cidr", sa.String(length=50), nullable=False),
         sa.Column(
-            'label',
+            "label",
             sa.String(length=200),
             nullable=False,
             server_default=sa.text("''"),
         ),
         sa.Column(
-            'enabled',
+            "enabled",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text('true'),
+            server_default=sa.text("true"),
         ),
         sa.Column(
-            'created_at',
+            "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text("now()"),
         ),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('cidr', name='uq_exception_ips_cidr'),
-        schema='pii',
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("cidr", name="uq_exception_ips_cidr"),
+        schema="pii",
     )
     op.create_index(
-        op.f('ix_pii_exception_ips_cidr'),
-        'exception_ips',
-        ['cidr'],
+        op.f("ix_pii_exception_ips_cidr"),
+        "exception_ips",
+        ["cidr"],
         unique=True,
-        schema='pii',
+        schema="pii",
     )
 
     op.create_table(
-        'api_ip_callers',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('cidr', sa.String(length=50), nullable=False),
-        sa.Column('name', sa.String(length=200), nullable=False),
+        "api_ip_callers",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("cidr", sa.String(length=50), nullable=False),
+        sa.Column("name", sa.String(length=200), nullable=False),
         sa.Column(
-            'rate_per_minute',
+            "rate_per_minute",
             sa.Integer(),
             nullable=False,
-            server_default=sa.text('60'),
+            server_default=sa.text("60"),
         ),
         sa.Column(
-            'rate_per_hour',
+            "rate_per_hour",
             sa.Integer(),
             nullable=False,
-            server_default=sa.text('1000'),
+            server_default=sa.text("1000"),
         ),
         sa.Column(
-            'enabled',
+            "enabled",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text('true'),
+            server_default=sa.text("true"),
         ),
         sa.Column(
-            'created_at',
+            "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text('now()'),
+            server_default=sa.text("now()"),
         ),
         sa.CheckConstraint(
-            'rate_per_minute > 0 AND rate_per_hour > 0',
-            name='ck_api_ip_callers_rate_positive',
+            "rate_per_minute > 0 AND rate_per_hour > 0",
+            name="ck_api_ip_callers_rate_positive",
         ),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('cidr', name='uq_api_ip_callers_cidr'),
-        schema='pii',
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("cidr", name="uq_api_ip_callers_cidr"),
+        schema="pii",
     )
     op.create_index(
-        op.f('ix_pii_api_ip_callers_cidr'),
-        'api_ip_callers',
-        ['cidr'],
+        op.f("ix_pii_api_ip_callers_cidr"),
+        "api_ip_callers",
+        ["cidr"],
         unique=True,
-        schema='pii',
+        schema="pii",
     )
 
 
 def downgrade() -> None:
     op.drop_index(
-        op.f('ix_pii_api_ip_callers_cidr'),
-        table_name='api_ip_callers',
-        schema='pii',
+        op.f("ix_pii_api_ip_callers_cidr"),
+        table_name="api_ip_callers",
+        schema="pii",
     )
-    op.drop_table('api_ip_callers', schema='pii')
+    op.drop_table("api_ip_callers", schema="pii")
     op.drop_index(
-        op.f('ix_pii_exception_ips_cidr'),
-        table_name='exception_ips',
-        schema='pii',
+        op.f("ix_pii_exception_ips_cidr"),
+        table_name="exception_ips",
+        schema="pii",
     )
-    op.drop_table('exception_ips', schema='pii')
+    op.drop_table("exception_ips", schema="pii")

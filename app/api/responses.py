@@ -67,10 +67,23 @@ def build_response(
 #   - internal entity codes (KR_RRN, EMAIL_ADDRESS, CREDIT_CARD, etc.)
 #   - masked PII preview (asterisks mixed with digits, etc.)
 _FORBIDDEN_IN_USER_MESSAGE: tuple[str, ...] = (
-    "score", "confidence", "presidio", "spacy", "gliner", "regex",
-    "KR_RRN", "KR_PHONE", "KR_PASSPORT", "KR_DRIVERLICENSE",
-    "KR_BUSINESS_NUM", "KR_BANK_ACCOUNT", "EMAIL_ADDRESS",
-    "CREDIT_CARD", "PERSON", "LOCATION", "INTERNAL_NAME",
+    "score",
+    "confidence",
+    "presidio",
+    "spacy",
+    "gliner",
+    "regex",
+    "KR_RRN",
+    "KR_PHONE",
+    "KR_PASSPORT",
+    "KR_DRIVERLICENSE",
+    "KR_BUSINESS_NUM",
+    "KR_BANK_ACCOUNT",
+    "EMAIL_ADDRESS",
+    "CREDIT_CARD",
+    "PERSON",
+    "LOCATION",
+    "INTERNAL_NAME",
 )
 
 

@@ -18,6 +18,7 @@ from app.api.detect import (
 @dataclass
 class _R:
     """Stub mimicking presidio_analyzer.RecognizerResult shape."""
+
     entity_type: str
     start: int
     end: int

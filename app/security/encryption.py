@@ -46,9 +46,7 @@ def _decode_master_key(hex_str: str) -> bytes:
     Empty input is rejected — encryption must be configured before use.
     """
     if not hex_str:
-        raise EncryptionError(
-            "pii_encryption_key is not configured (set 32-byte hex env var)"
-        )
+        raise EncryptionError("pii_encryption_key is not configured (set 32-byte hex env var)")
     try:
         key = bytes.fromhex(hex_str)
     except ValueError as e:
@@ -81,17 +79,13 @@ def _old_ciphers() -> dict[int, AESGCM]:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise EncryptionError(
-            f"pii_encryption_old_keys is not valid JSON: {e}"
-        ) from e
+        raise EncryptionError(f"pii_encryption_old_keys is not valid JSON: {e}") from e
     out: dict[int, AESGCM] = {}
     for k, v in parsed.items():
         try:
             kid = int(k) & 0xFF
         except (ValueError, TypeError) as e:
-            raise EncryptionError(
-                f"pii_encryption_old_keys: bad key_id {k!r}"
-            ) from e
+            raise EncryptionError(f"pii_encryption_old_keys: bad key_id {k!r}") from e
         out[kid] = AESGCM(_decode_master_key(str(v)))
     return out
 

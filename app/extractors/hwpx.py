@@ -44,9 +44,7 @@ def _local(tag: str) -> str:
 def _extract_sync(data: bytes, filename: str, mime_type: str) -> str:
     """Synchronous core run on a worker thread."""
     if mime_type in HWP5_MIMES:
-        raise ExtractionError(
-            "REQ-4033", filename=filename, detail="HWP 5 binary format"
-        )
+        raise ExtractionError("REQ-4033", filename=filename, detail="HWP 5 binary format")
 
     if not _is_hwpx(data):
         # Some clients send HWPX with the wrong mime; if it isn't a ZIP
@@ -60,23 +58,20 @@ def _extract_sync(data: bytes, filename: str, mime_type: str) -> str:
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as e:
-        raise ExtractionError(
-            "REQ-4042", filename=filename, detail=f"bad zip: {e}"
-        ) from e
+        raise ExtractionError("REQ-4042", filename=filename, detail=f"bad zip: {e}") from e
 
     parts: list[str] = []
     try:
         # Sort so section order is deterministic for tests.
         names = sorted(
-            n for n in zf.namelist()
-            if n.startswith("Contents/") and n.endswith(".xml")
-            and "section" in n.lower()
+            n
+            for n in zf.namelist()
+            if n.startswith("Contents/") and n.endswith(".xml") and "section" in n.lower()
         )
         if not names:
             # Some HWPX exports stash content under a different prefix.
             names = sorted(
-                n for n in zf.namelist()
-                if n.endswith(".xml") and "section" in n.lower()
+                n for n in zf.namelist() if n.endswith(".xml") and "section" in n.lower()
             )
         for name in names:
             try:

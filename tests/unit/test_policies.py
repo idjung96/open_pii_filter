@@ -19,22 +19,20 @@ from app.core.policies import (
     ("strictness", "score", "expected"),
     [
         # low: block ≥ 0.65
-        ("low",    0.30, "pass"),
-        ("low",    0.50, "pass"),
-        ("low",    0.65, "block"),
+        ("low", 0.30, "pass"),
+        ("low", 0.50, "pass"),
+        ("low", 0.65, "block"),
         # medium: block ≥ 0.78
         ("medium", 0.40, "pass"),
         ("medium", 0.77, "pass"),
         ("medium", 0.78, "block"),
         # high: block ≥ 0.88
-        ("high",   0.60, "pass"),
-        ("high",   0.87, "pass"),
-        ("high",   0.88, "block"),
+        ("high", 0.60, "pass"),
+        ("high", 0.87, "pass"),
+        ("high", 0.88, "block"),
     ],
 )
-def test_score_to_band_thresholds(
-    strictness: str, score: float, expected: str
-) -> None:
+def test_score_to_band_thresholds(strictness: str, score: float, expected: str) -> None:
     assert score_to_band(score, strictness) == expected  # type: ignore[arg-type]
 
 
@@ -81,9 +79,7 @@ def test_high_strictness_drops_weak_bank_pattern() -> None:
         ("KR_BUSINESS_NUM", 0.90, "BLOCK-2099"),
     ],
 )
-def test_map_detection_to_code_medium_block(
-    entity_type: str, score: float, expected: str
-) -> None:
+def test_map_detection_to_code_medium_block(entity_type: str, score: float, expected: str) -> None:
     code = map_detection_to_code(
         entity_type=entity_type,
         score=score,
@@ -104,9 +100,7 @@ def test_map_detection_to_code_medium_block(
         ("KR_BUSINESS_NUM", 0.60),
     ],
 )
-def test_map_detection_to_code_medium_pass(
-    entity_type: str, score: float
-) -> None:
+def test_map_detection_to_code_medium_pass(entity_type: str, score: float) -> None:
     code = map_detection_to_code(
         entity_type=entity_type,
         score=score,

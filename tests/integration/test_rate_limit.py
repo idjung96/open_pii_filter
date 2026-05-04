@@ -24,24 +24,22 @@ async def low_rate_key():
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
-            s, name=f"rl-{uuid.uuid4().hex[:6]}",
-            rate_per_minute=3, rate_per_hour=1000,
+            s,
+            name=f"rl-{uuid.uuid4().hex[:6]}",
+            rate_per_minute=3,
+            rate_per_hour=1000,
             created_by="pytest",
         )
         await s.commit()
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id=:k"),
-                        {"k": key_id})
-        await s.execute(text("DELETE FROM pii.api_key_nonces WHERE key_id=:k"),
-                        {"k": key_id})
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id=:k"), {"k": key_id})
+        await s.execute(text("DELETE FROM pii.api_key_nonces WHERE key_id=:k"), {"k": key_id})
         await s.commit()
     r = get_redis()
     await r.delete(f"rl:apikey:{key_id}:m", f"rl:apikey:{key_id}:h")
@@ -52,18 +50,25 @@ def _hdr(key_id: str, secret: str, body: bytes) -> dict[str, str]:
     n = uuid.uuid4().hex
     sig = compute_signature(
         secret=secret,
-        timestamp=ts, nonce=n, method="POST",
-        path="/v1/detect/post", body=body,
+        timestamp=ts,
+        nonce=n,
+        method="POST",
+        path="/v1/detect/post",
+        body=body,
     )
     return {
-        "X-API-Key": key_id, "X-Timestamp": ts, "X-Nonce": n,
-        "X-Signature": sig, "content-type": "application/json",
+        "X-API-Key": key_id,
+        "X-Timestamp": ts,
+        "X-Nonce": n,
+        "X-Signature": sig,
+        "content-type": "application/json",
     }
 
 
 # ── T3.7: 4th request inside the minute → 429 + Retry-After ───────────────
 async def test_t3_7_rate_limit_emits_429(
-    client_anon: AsyncClient, low_rate_key: tuple[str, str],
+    client_anon: AsyncClient,
+    low_rate_key: tuple[str, str],
 ) -> None:
     key_id, secret = low_rate_key
     body_template = (

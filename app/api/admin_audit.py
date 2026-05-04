@@ -105,9 +105,7 @@ class AuditEventsResponse(BaseModel):
 # ── Cursor helpers ────────────────────────────────────────────────────────
 def _encode_cursor(occurred_at: datetime, row_id: int) -> str:
     payload = {"o": occurred_at.isoformat(), "i": int(row_id)}
-    return base64.urlsafe_b64encode(
-        json.dumps(payload).encode("utf-8")
-    ).decode("ascii")
+    return base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
 
 
 def _decode_cursor(cursor: str) -> tuple[datetime, int]:

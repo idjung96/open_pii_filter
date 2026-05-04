@@ -147,9 +147,7 @@ async def vlm_ocr(image: PILImage, *, settings: Settings) -> OCRResult:
                     {"type": "text", "text": _PROMPT},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{b64}"
-                        },
+                        "image_url": {"url": f"data:image/png;base64,{b64}"},
                     },
                 ],
             }

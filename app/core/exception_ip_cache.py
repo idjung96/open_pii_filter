@@ -41,9 +41,7 @@ async def reload_exception_ips(session: AsyncSession) -> int:
         result = await session.execute(stmt)
         cidrs = {row[0] for row in result.all() if row[0]}
         _cache = cidrs
-        logger.info(
-            "exception_ip_cache reloaded", extra={"count": len(cidrs)}
-        )
+        logger.info("exception_ip_cache reloaded", extra={"count": len(cidrs)})
         return len(cidrs)
     except Exception as e:
         logger.warning("exception_ip_cache reload failed: %s", e)

@@ -86,11 +86,7 @@ def _hand_rolled_pdf(pages_text: list[str]) -> bytes:
         # pdfplumber returns the codepoints as text which is sufficient
         # for downstream regex testing.
         safe = text.replace("(", "\\(").replace(")", "\\)")
-        stream = (
-            b"BT /F1 12 Tf 72 720 Td ("
-            + safe.encode("latin-1", errors="replace")
-            + b") Tj ET"
-        )
+        stream = b"BT /F1 12 Tf 72 720 Td (" + safe.encode("latin-1", errors="replace") + b") Tj ET"
         # Page object references parent + resources + content stream
         page_dict = (
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
@@ -98,11 +94,7 @@ def _hand_rolled_pdf(pages_text: list[str]) -> bytes:
             f"/BaseFont /Helvetica >> >> >> /Contents {content_obj_num} 0 R >>"
         ).encode()
         objects.append(_obj(page_obj_num, page_dict))
-        content_dict = (
-            f"<< /Length {len(stream)} >>\nstream\n".encode()
-            + stream
-            + b"\nendstream"
-        )
+        content_dict = f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
         objects.append(_obj(content_obj_num, content_dict))
 
     out = bytearray(b"%PDF-1.4\n%\xff\xff\xff\xff\n")
@@ -117,9 +109,7 @@ def _hand_rolled_pdf(pages_text: list[str]) -> bytes:
     for off in offsets:
         out += f"{off:010d} 00000 n \n".encode()
     out += b"trailer\n"
-    out += (
-        f"<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n"
-    ).encode()
+    out += (f"<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n").encode()
     out += b"%%EOF\n"
     return bytes(out)
 
@@ -158,11 +148,7 @@ def make_scan_only_pdf() -> bytes:
     xref = b"xref\n0 4\n0000000000 65535 f \n"
     for off in offsets[1:]:
         xref += f"{off:010d} 00000 n \n".encode()
-    trailer = (
-        b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n"
-        + str(pos).encode()
-        + b"\n%%EOF\n"
-    )
+    trailer = b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n" + str(pos).encode() + b"\n%%EOF\n"
     return pdf_body + xref + trailer
 
 

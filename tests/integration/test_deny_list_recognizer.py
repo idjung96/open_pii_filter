@@ -76,10 +76,10 @@ async def test_t2_6_deny_recognizer_filters_by_entity(
         score=0.9,
     )
     analyzer = await build_analyzer_with_deny_list(db_session)
-    results = analyzer.analyze(
-        text=f"사번 {sentinel} 입니다", language="ko"
-    )
+    results = analyzer.analyze(text=f"사번 {sentinel} 입니다", language="ko")
     matched = [r for r in results if r.entity_type == "KR_EMPLOYEE_ID"]
-    assert any(text_slice == sentinel
-               for r in matched
-               for text_slice in [f"사번 {sentinel} 입니다"[r.start : r.end]])
+    assert any(
+        text_slice == sentinel
+        for r in matched
+        for text_slice in [f"사번 {sentinel} 입니다"[r.start : r.end]]
+    )

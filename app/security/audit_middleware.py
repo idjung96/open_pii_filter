@@ -121,9 +121,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
     # Endpoints that do not warrant audit rows (cheap, frequent probes).
     _SKIP_PATHS: frozenset[str] = frozenset({"/healthz", "/v1/healthz"})
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path in self._SKIP_PATHS:
             return await call_next(request)
 
@@ -167,8 +165,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     chunks.append(chunk if isinstance(chunk, bytes) else bytes(chunk))
                 raw_resp_bytes = b"".join(chunks)
                 new_headers = {
-                    k: v for k, v in response.headers.items()
-                    if k.lower() != "content-length"
+                    k: v for k, v in response.headers.items() if k.lower() != "content-length"
                 }
                 response = _SResponse(
                     content=raw_resp_bytes,
@@ -180,9 +177,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         finally:
             elapsed = time.perf_counter() - started
             processing_ms = int(elapsed * 1000)
-            payload: AuditPayload | None = getattr(
-                request.state, "audit_payload", None
-            )
+            payload: AuditPayload | None = getattr(request.state, "audit_payload", None)
             # Phase 8 — Prometheus HTTP counter + latency histogram. Use
             # the route template (request.url.path is fine for everything
             # except /v1/jobs/{id}; we approximate by mapping known
@@ -228,17 +223,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
                         path=request.url.path,
                         http_status=(response.status_code if response else 0),
                         response_code=payload.response_code if payload else None,
-                        detected_entity_count=(
-                            payload.detected_entity_count if payload else 0
-                        ),
-                        detected_entity_types=(
-                            payload.detected_entity_types if payload else None
-                        ),
+                        detected_entity_count=(payload.detected_entity_count if payload else 0),
+                        detected_entity_types=(payload.detected_entity_types if payload else None),
                         processing_ms=processing_ms,
                         body_hash=body_hash,
-                        shadow_hit_types=(
-                            payload.shadow_hit_types if payload else None
-                        ),
+                        shadow_hit_types=(payload.shadow_hit_types if payload else None),
                         request_body_text=req_body_text,
                         response_body_text=resp_body_text,
                         request_headers_text=req_headers_text,

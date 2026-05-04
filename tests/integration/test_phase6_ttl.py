@@ -37,8 +37,7 @@ async def test_t6_3_audit_cleanup_drops_old_rows(db_session: AsyncSession) -> No
     await db_session.execute(text("SET LOCAL app.bypass_audit_lock = 'on'"))
     await db_session.execute(
         text(
-            "UPDATE pii.audit_events SET occurred_at = now() - interval '400 days' "
-            "WHERE id = :id"
+            "UPDATE pii.audit_events SET occurred_at = now() - interval '400 days' WHERE id = :id"
         ),
         {"id": inserted_id},
     )

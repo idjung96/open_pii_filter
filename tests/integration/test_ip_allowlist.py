@@ -44,14 +44,14 @@ async def restricted_key():
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
-            s, name=f"ip-{uuid.uuid4().hex[:6]}",
-            rate_per_minute=10_000, rate_per_hour=10_000_000,
+            s,
+            name=f"ip-{uuid.uuid4().hex[:6]}",
+            rate_per_minute=10_000,
+            rate_per_hour=10_000_000,
             ip_allowlist=["10.99.99.99/32"],
             created_by="pytest",
         )
@@ -59,10 +59,8 @@ async def restricted_key():
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id=:k"),
-                        {"k": key_id})
-        await s.execute(text("DELETE FROM pii.api_key_nonces WHERE key_id=:k"),
-                        {"k": key_id})
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id=:k"), {"k": key_id})
+        await s.execute(text("DELETE FROM pii.api_key_nonces WHERE key_id=:k"), {"k": key_id})
         await s.commit()
     r = get_redis()
     await r.delete(f"rl:apikey:{key_id}:m", f"rl:apikey:{key_id}:h")
@@ -73,24 +71,35 @@ def _hdr(key_id: str, secret: str, body: bytes) -> dict[str, str]:
     n = uuid.uuid4().hex
     sig = compute_signature(
         secret=secret,
-        timestamp=ts, nonce=n, method="POST",
-        path="/v1/detect/post", body=body,
+        timestamp=ts,
+        nonce=n,
+        method="POST",
+        path="/v1/detect/post",
+        body=body,
     )
     return {
-        "X-API-Key": key_id, "X-Timestamp": ts, "X-Nonce": n,
-        "X-Signature": sig, "content-type": "application/json",
+        "X-API-Key": key_id,
+        "X-Timestamp": ts,
+        "X-Nonce": n,
+        "X-Signature": sig,
+        "content-type": "application/json",
     }
 
 
 async def test_t3_8_ip_outside_allowlist_403(
-    client_anon: AsyncClient, restricted_key: tuple[str, str],
+    client_anon: AsyncClient,
+    restricted_key: tuple[str, str],
 ) -> None:
     key_id, secret = restricted_key
-    body = b'{"request_id":"00000000-0000-0000-0000-000000000aaa",' \
-           b'"post":{"board_id":"g","title":"x","body":"y"},' \
-           b'"author":{"name":"x","ip":"127.0.0.1"}}'
+    body = (
+        b'{"request_id":"00000000-0000-0000-0000-000000000aaa",'
+        b'"post":{"board_id":"g","title":"x","body":"y"},'
+        b'"author":{"name":"x","ip":"127.0.0.1"}}'
+    )
     resp = await client_anon.post(
-        "/v1/detect/post", content=body, headers=_hdr(key_id, secret, body),
+        "/v1/detect/post",
+        content=body,
+        headers=_hdr(key_id, secret, body),
     )
     assert resp.status_code == 403
     assert resp.json()["code"] == "REQ-4015"

@@ -94,9 +94,7 @@ async def submit_feedback(
     # Compute reporter hash. Prefer the supplied email; fall back to
     # the source IP so we can still de-duplicate spammers.
     reporter_source = (
-        str(payload.reporter_email)
-        if payload.reporter_email is not None
-        else caller.client_ip
+        str(payload.reporter_email) if payload.reporter_email is not None else caller.client_ip
     )
     reporter_hash = _hash_reporter(reporter_source)
 

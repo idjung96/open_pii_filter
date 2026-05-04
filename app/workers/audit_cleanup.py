@@ -39,13 +39,9 @@ async def audit_cleanup_loop(
         try:
             days = retention_days or get_settings().audit_log_retention_days
             async with sm() as session:
-                deleted = await cleanup_expired_audit_events(
-                    session, retention_days=days
-                )
+                deleted = await cleanup_expired_audit_events(session, retention_days=days)
                 if deleted:
-                    logger.info(
-                        "audit_cleanup: deleted %d expired audit events", deleted
-                    )
+                    logger.info("audit_cleanup: deleted %d expired audit events", deleted)
         except asyncio.CancelledError:
             raise
         except Exception:

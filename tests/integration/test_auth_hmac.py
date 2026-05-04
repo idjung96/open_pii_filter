@@ -42,9 +42,7 @@ async def issued_key(db_session: AsyncSession) -> tuple[str, str]:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
@@ -60,12 +58,8 @@ async def issued_key(db_session: AsyncSession) -> tuple[str, str]:
     yield key_id, secret
 
     async with sm() as s:
-        await s.execute(
-            text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id}
-        )
-        await s.execute(
-            text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"), {"k": key_id}
-        )
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id})
+        await s.execute(text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"), {"k": key_id})
         await s.commit()
     r = get_redis()
     await r.delete(f"rl:apikey:{key_id}:m", f"rl:apikey:{key_id}:h")
@@ -102,7 +96,8 @@ def _build_headers(
 
 # ── T3.1: valid HMAC → 200 ────────────────────────────────────────────────
 async def test_t3_1_valid_hmac_passes(
-    client_anon: AsyncClient, issued_key: tuple[str, str],
+    client_anon: AsyncClient,
+    issued_key: tuple[str, str],
 ) -> None:
     key_id, secret = issued_key
     body = (
@@ -117,10 +112,11 @@ async def test_t3_1_valid_hmac_passes(
 
 # ── T3.2: bad signature → 401 (REQ-4010) ──────────────────────────────────
 async def test_t3_2_bad_signature_401(
-    client_anon: AsyncClient, issued_key: tuple[str, str],
+    client_anon: AsyncClient,
+    issued_key: tuple[str, str],
 ) -> None:
     key_id, secret = issued_key
-    body = b'{}'
+    body = b"{}"
     headers = _build_headers(key_id=key_id, secret=secret, body=body)
     headers["X-Signature"] = "0" * 64
     resp = await client_anon.post("/v1/detect/post", content=body, headers=headers)
@@ -130,12 +126,15 @@ async def test_t3_2_bad_signature_401(
 
 # ── T3.3: timestamp >5min off → 401 (REQ-4012) ────────────────────────────
 async def test_t3_3_timestamp_out_of_window_401(
-    client_anon: AsyncClient, issued_key: tuple[str, str],
+    client_anon: AsyncClient,
+    issued_key: tuple[str, str],
 ) -> None:
     key_id, secret = issued_key
-    body = b'{}'
+    body = b"{}"
     headers = _build_headers(
-        key_id=key_id, secret=secret, body=body,
+        key_id=key_id,
+        secret=secret,
+        body=body,
         ts=int(time.time()) - 6 * 60,
     )
     resp = await client_anon.post("/v1/detect/post", content=body, headers=headers)
@@ -145,7 +144,8 @@ async def test_t3_3_timestamp_out_of_window_401(
 
 # ── T3.4: same (timestamp, nonce) replay → 401 (REQ-4013) ─────────────────
 async def test_t3_4_replay_blocked_401(
-    client_anon: AsyncClient, issued_key: tuple[str, str],
+    client_anon: AsyncClient,
+    issued_key: tuple[str, str],
 ) -> None:
     key_id, secret = issued_key
     body = (
@@ -179,21 +179,20 @@ async def test_t3_5_missing_api_key_401(client_anon: AsyncClient) -> None:
 
 # ── T3.6: revoked key → 403 (REQ-4014) ────────────────────────────────────
 async def test_t3_6_revoked_key_403(
-    client_anon: AsyncClient, issued_key: tuple[str, str],
+    client_anon: AsyncClient,
+    issued_key: tuple[str, str],
 ) -> None:
     key_id, secret = issued_key
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         await revoke(s, key_id)
         await s.commit()
 
-    body = b'{}'
+    body = b"{}"
     headers = _build_headers(key_id=key_id, secret=secret, body=body)
     resp = await client_anon.post("/v1/detect/post", content=body, headers=headers)
     assert resp.status_code == 403

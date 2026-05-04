@@ -19,6 +19,7 @@ DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB (per spec T3.9)
 def _too_large_response() -> JSONResponse:
     rc = get_code("REQ-4030")
     from uuid import UUID
+
     resp = build_response(
         request_id=UUID("00000000-0000-0000-0000-000000000000"),
         code="REQ-4030",
@@ -34,9 +35,7 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._max_bytes = max_bytes
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Trust Content-Length when present — almost every well-behaved
         # client sets it, including httpx, requests, curl, and Nginx.
         cl = request.headers.get("content-length")

@@ -51,9 +51,7 @@ async def admin_key(db_session: AsyncSession) -> tuple[str, str]:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
@@ -68,9 +66,7 @@ async def admin_key(db_session: AsyncSession) -> tuple[str, str]:
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(
-            text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id}
-        )
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id})
         await s.execute(
             text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"),
             {"k": key_id},
@@ -85,9 +81,7 @@ async def non_admin_key(db_session: AsyncSession) -> tuple[str, str]:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
@@ -102,9 +96,7 @@ async def non_admin_key(db_session: AsyncSession) -> tuple[str, str]:
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(
-            text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id}
-        )
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id})
         await s.execute(
             text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"),
             {"k": key_id},
@@ -115,13 +107,21 @@ async def non_admin_key(db_session: AsyncSession) -> tuple[str, str]:
 
 
 def _signed_headers(
-    *, key_id: str, secret: str, path: str, body: bytes = b"",
+    *,
+    key_id: str,
+    secret: str,
+    path: str,
+    body: bytes = b"",
 ) -> dict[str, str]:
     ts = str(int(time.time()))
     n = uuid.uuid4().hex
     sig = compute_signature(
-        secret=secret, timestamp=ts, nonce=n,
-        method="GET", path=path, body=body,
+        secret=secret,
+        timestamp=ts,
+        nonce=n,
+        method="GET",
+        path=path,
+        body=body,
     )
     return {
         "X-API-Key": key_id,
@@ -131,9 +131,7 @@ def _signed_headers(
     }
 
 
-def _patch_admin_allowlist(
-    monkeypatch: pytest.MonkeyPatch, *, allowlist: str
-) -> None:
+def _patch_admin_allowlist(monkeypatch: pytest.MonkeyPatch, *, allowlist: str) -> None:
     fake = lambda: _settings_with(admin_ip_allowlist=allowlist)  # noqa: E731
     monkeypatch.setattr("app.config.get_settings", fake)
     import app.api.admin_audit as adm_aud
@@ -150,11 +148,13 @@ def _admin_app(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
     import importlib
 
     import app.main as main_mod
+
     importlib.reload(main_mod)
     fake = lambda: _settings_with(admin_ip_allowlist="127.0.0.0/8")  # noqa: E731
     monkeypatch.setattr(main_mod, "get_settings", fake)
     import app.api.admin_audit as adm_aud
     import app.api.admin_stats as adm_stats
+
     monkeypatch.setattr(adm_aud, "get_settings", fake)
     monkeypatch.setattr(adm_stats, "get_settings", fake, raising=False)
     return main_mod.app
@@ -165,6 +165,7 @@ def _no_admin_app(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-d
     import importlib
 
     import app.main as main_mod
+
     importlib.reload(main_mod)
     fake = lambda: _settings_with(admin_ip_allowlist="")  # noqa: E731
     monkeypatch.setattr(main_mod, "get_settings", fake)
@@ -198,9 +199,7 @@ async def test_t7_5_detections_stats_returns_counts(
 
     key_id, secret = admin_key
     app = _admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/stats/detections"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -236,9 +235,7 @@ async def test_t7_5_verdicts_stats(
 
     key_id, secret = admin_key
     app = _admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/stats/verdicts"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -269,9 +266,7 @@ async def test_t7_5_feedback_stats(
 
     key_id, secret = admin_key
     app = _admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/stats/feedback"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -290,9 +285,7 @@ async def test_t7_5_non_admin_gets_403(
 
     key_id, secret = non_admin_key
     app = _admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/stats/detections"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -306,8 +299,6 @@ async def test_t7_5_stats_not_mounted_when_allowlist_empty(
     from httpx import ASGITransport, AsyncClient
 
     app = _no_admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/v1/admin/stats/detections")
     assert resp.status_code == 404

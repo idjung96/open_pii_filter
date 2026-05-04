@@ -80,15 +80,11 @@ class ApiKey(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    key_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, unique=True, index=True
-    )
+    key_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     secret: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     # NULL = no per-key IP restriction (global allowlist still applies if set).
-    ip_allowlist: Mapped[list[str] | None] = mapped_column(
-        ARRAY(Text), nullable=True
-    )
+    ip_allowlist: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     rate_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     rate_per_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -101,9 +97,7 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExtractionJob(Base):
@@ -127,9 +121,7 @@ class ExtractionJob(Base):
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     callback_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="PENDING", index=True
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING", index=True)
     body_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     body_verdict: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # JSON-encoded list[WebhookAttachmentResult-shaped dict]; populated
@@ -139,9 +131,7 @@ class ExtractionJob(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Webhook delivery audit: number of POST attempts so far.
     webhook_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     webhook_delivered_at: Mapped[datetime | None] = mapped_column(
@@ -182,26 +172,20 @@ class AuditEvent(Base):
     __table_args__ = ({"schema": _SCHEMA},)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    request_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True
-    )
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
         index=True,
     )
-    api_key_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True
-    )
+    api_key_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     source_ip: Mapped[str] = mapped_column(String(45), nullable=False)
     method: Mapped[str] = mapped_column(String(8), nullable=False)
     path: Mapped[str] = mapped_column(String(256), nullable=False)
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    detected_entity_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    detected_entity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Comma-separated entity_type list (NOT plaintext) — e.g. "KR_RRN,EMAIL_ADDRESS"
     detected_entity_types: Mapped[str | None] = mapped_column(Text, nullable=True)
     processing_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -304,9 +288,7 @@ class PiiFeedback(Base):
     __table_args__ = ({"schema": _SCHEMA},)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    request_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True
-    )
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     original_code: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     # SHA-256 hex of (project salt + email-or-IP). NEVER plaintext email.
@@ -329,9 +311,7 @@ class ExceptionIp(Base):
     __table_args__ = ({"schema": _SCHEMA},)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    cidr: Mapped[str] = mapped_column(
-        String(50), nullable=False, unique=True, index=True
-    )
+    cidr: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     label: Mapped[str] = mapped_column(
         String(200), nullable=False, default="", server_default=text("''")
     )
@@ -363,9 +343,7 @@ class ApiIpCaller(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    cidr: Mapped[str] = mapped_column(
-        String(50), nullable=False, unique=True, index=True
-    )
+    cidr: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     rate_per_minute: Mapped[int] = mapped_column(
         Integer, nullable=False, default=60, server_default=text("60")
@@ -392,9 +370,7 @@ class AlerterState(Base):
     __table_args__ = ({"schema": _SCHEMA},)
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True, nullable=False)
-    last_alert_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_alert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
