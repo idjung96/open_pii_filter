@@ -16,7 +16,7 @@ from typing import ClassVar
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
-from tests.fixtures.checksum import business_num_checksum
+from app.core.checksum import business_num_checksum
 
 
 class KrBusinessNumRecognizer(PatternRecognizer):
