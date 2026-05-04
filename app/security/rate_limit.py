@@ -151,8 +151,8 @@ def reset_for_tests() -> None:
 # Helper for retry_after seconds — exposed for tests/middleware
 def seconds_until_refill(
     *,
-    capacity: int,
-    rate_per_minute: int,  # noqa: ARG001
+    capacity: int,  # noqa: ARG001 — kept for API stability
+    rate_per_minute: int,
 ) -> int:
     """How long a fully drained bucket needs to allow at least one token."""
     rate = rate_per_minute / 60

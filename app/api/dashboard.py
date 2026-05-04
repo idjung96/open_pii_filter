@@ -568,18 +568,19 @@ async def patterns_edit_form(
 
 @router.post("/patterns/edit")
 async def patterns_edit_save(
-    request: Request,
+    _request: Request,
     class_name: str = Form(...),
-    pattern_name: list[str] = Form(default=[]),
-    pattern_regex: list[str] = Form(default=[]),
-    pattern_score: list[str] = Form(default=[]),
+    pattern_name: list[str] = Form(default=[]),  # noqa: B008
+    pattern_regex: list[str] = Form(default=[]),  # noqa: B008
+    pattern_score: list[str] = Form(default=[]),  # noqa: B008
     context: str = Form(default=""),
     _session_id: str = Depends(get_dashboard_session),
 ) -> Response:
     """폼 입력으로 patterns / context 오버라이드 저장 + 캐시 reset."""
+    from urllib.parse import quote
+
     from app.core.analyzer import reset_analyzer_cache
     from app.core.recognizer_overrides import set_override
-    from urllib.parse import quote
 
     rows = max(len(pattern_name), len(pattern_regex), len(pattern_score))
     patterns: list[dict[str, Any]] = []
@@ -642,13 +643,14 @@ def _is_blocked_response(http_status: int | None, response_code: str | None) -> 
     """
     if http_status is not None and http_status >= 400:
         return True
-    if response_code and (
-        response_code.startswith("BLOCK-")
-        or response_code.startswith("REQ-")
-        or response_code.startswith("SVR-")
-    ):
-        return True
-    return False
+    return bool(
+        response_code
+        and (
+            response_code.startswith("BLOCK-")
+            or response_code.startswith("REQ-")
+            or response_code.startswith("SVR-")
+        )
+    )
 
 
 @router.get("/audit", response_class=HTMLResponse)
@@ -1441,7 +1443,7 @@ async def settings_change_password(
 
 @router.post("/settings/audit-detail")
 async def settings_audit_detail(
-    request: Request,
+    _request: Request,
     enabled: str = Form(""),
     _session_id: str = Depends(get_dashboard_session),
 ) -> Response:

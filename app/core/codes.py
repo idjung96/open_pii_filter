@@ -409,7 +409,9 @@ _REQ: dict[str, ResponseCode] = {
         http_status=403,
         verdict=Verdict.ERROR,
         system_message="HWP/HWPX restricted to allowlisted authors",
-        user_message_template="한글(.hwp/.hwpx) 파일 '{filename}' 은(는) 등록된 작성자만 첨부할 수 있습니다.",
+        user_message_template=(
+            "한글(.hwp/.hwpx) 파일 '{filename}' 은(는) 등록된 작성자만 첨부할 수 있습니다."
+        ),
         developer_message_template=(
             "hwp attachment from non-exception ip — author={author_ip}, mime={mime_type}. "
             "Linux runtime cannot parse hwp/hwpx (pyhwpx is Windows-only); only "
