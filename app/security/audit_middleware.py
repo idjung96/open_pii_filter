@@ -173,7 +173,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     headers=new_headers,
                     media_type=response.media_type,
                 )
-            return response  # noqa: RET504 — finally block uses the variable
+            return response
         finally:
             elapsed = time.perf_counter() - started
             processing_ms = int(elapsed * 1000)

@@ -53,8 +53,8 @@ class EnvelopeHTTPException(HTTPException):
 def _envelope(
     code: str,
     *,
-    status: int = 0,
-    headers: dict[str, str] | None = None,  # noqa: ARG001
+    status: int = 0,  # noqa: ARG001 — kept for callsite compatibility
+    headers: dict[str, str] | None = None,
     **vars: object,
 ) -> EnvelopeHTTPException:
     from uuid import UUID

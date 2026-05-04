@@ -146,7 +146,7 @@ def test_unknown_entity_falls_back() -> None:
         strictness="medium",
     )
     assert block_fallback == "BLOCK-2099"
-    assert pass_fallback == "OK-0000"
+    assert pass_fallback == "OK-0000"  # noqa: S105 — response code, not a password
 
 
 # ── ENTITY_TO_CODE table sanity ────────────────────────────────────────────

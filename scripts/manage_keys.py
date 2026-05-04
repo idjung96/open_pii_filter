@@ -141,9 +141,10 @@ def cmd_load_db() -> None:
     import asyncio
 
     async def _run() -> None:
-        from app.db.session import get_sessionmaker
-        from app.db.models import ApiKey
         from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from app.db.models import ApiKey
+        from app.db.session import get_sessionmaker
 
         data = _load()
         sm = get_sessionmaker()
