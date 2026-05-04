@@ -10,6 +10,8 @@ authors = [{ name = "기관" }]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
+    # FastAPI `Form(...)` parsing requires python-multipart at runtime.
+    "python-multipart>=0.0.20",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "sqlalchemy[asyncio]>=2.0",
@@ -28,6 +30,10 @@ dependencies = [
     "clamd>=1.0.2",
     "lxml>=5.0",
     "httpx>=0.27",
+    # Phase 5 — image processing for OCR (PIL.Image, ImageOps).
+    "pillow>=10.0",
+    # Phase 6 — AES-256-GCM envelope encryption.
+    "cryptography>=43.0",
     # NOTE: pyhwpx is Windows-only and cannot install on Linux.
     # HWP/HWPX support strategy is pending Phase-4 design decision.
     # Phase 8 — Prometheus exposition + counters/histograms (T8.4).
