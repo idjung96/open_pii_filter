@@ -9,14 +9,45 @@ on:
 jobs:
   lint-type-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      # Phase 0: no real services needed — dummy URLs satisfy Settings validation
+      # The `psycopg2` driver is what's actually installed (see pyproject);
+      # use the matching SQLAlchemy URL scheme here.
       DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
-      DATABASE_URL_SYNC: postgresql+psycopg://ci:ci@localhost:5432/ci
+      DATABASE_URL_SYNC: postgresql+psycopg2://ci:ci@localhost:5432/ci
       DB_SCHEMA: pii
       REDIS_URL: redis://localhost:6379/0
+      # ClamAV isn't run as a service container — Phase-4 attachment tests
+      # gracefully `pytest.skip` when the scanner isn't reachable.
       CLAMAV_HOST: localhost
       CLAMAV_PORT: "3310"
+      # Required for the AES envelope tests: 32-byte hex-encoded key
+      # (64 hex chars = 32 bytes = AES-256). Production envs supply
+      # real values via secrets manager.
+      PII_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      WEBHOOK_SIGNING_SECRET: ci-webhook-signing-secret
 
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +76,26 @@ jobs:
 
       - name: Bandit
         run: uv run bandit -r app/ -c pyproject.toml
+
+      - name: Create `pii` schema
+        # Alembic creates tables in the schema but does not own the schema
+        # itself; bootstrap it before `upgrade head`.
+        run: |
+          uv run python -c "
+          import sqlalchemy as sa
+          from app.config import get_settings
+          eng = sa.create_engine(get_settings().database_url_sync, isolation_level='AUTOCOMMIT')
+          with eng.connect() as c:
+              c.execute(sa.text('CREATE SCHEMA IF NOT EXISTS pii'))
+          "
+
+      - name: Alembic upgrade head
+        run: uv run alembic upgrade head
+
+      - name: Download spaCy ko_core_news_lg model
+        # Required by Presidio AnalyzerEngine — used both by the session-
+        # scoped `analyzer` fixture and a handful of integration tests.
+        run: uv run python -m spacy download ko_core_news_lg
 
       - name: Pytest
         run: uv run pytest
