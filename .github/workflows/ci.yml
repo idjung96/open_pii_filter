@@ -165,7 +165,15 @@ jobs:
       - name: Smoke run (importable + health check)
         # The image's CMD launches uvicorn; we override to do a minimal
         # import to verify the build is functional. Full /readyz checks
-        # need DB + Redis which aren't available in this job.
+        # need DB + Redis which aren't available in this job. Settings
+        # is required at import time, so feed it dummy values via
+        # `-e` so the import can complete.
         run: |
-          docker run --rm pii-api:ci \
+          docker run --rm \
+            -e DATABASE_URL=postgresql+asyncpg://x:x@x/x \
+            -e DATABASE_URL_SYNC=postgresql+psycopg2://x:x@x/x \
+            -e REDIS_URL=redis://x:6379/0 \
+            -e PII_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
+            -e WEBHOOK_SIGNING_SECRET=ci-smoke \
+            pii-api:ci \
             python -c "from app.main import app; print(f'routes={len(app.routes)}')"
