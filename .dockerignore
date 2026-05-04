@@ -50,6 +50,9 @@ samples/
 
 # Docs (selectively copied; keep .md out of build context)
 *.md
+# pyproject.toml `readme = "README.md"` requires the file at build time,
+# so unblock it after the broad `*.md` deny above.
+!README.md
 docs/phase_*_completion.md
 docs/load_test_report.md
 docs/security_scan_report.md
