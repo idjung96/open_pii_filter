@@ -19,7 +19,7 @@ from typing import ClassVar
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
-from tests.fixtures.checksum import rrn_checksum
+from app.core.checksum import rrn_checksum
 
 
 class KrRrnRecognizer(PatternRecognizer):

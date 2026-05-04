@@ -110,7 +110,10 @@ def test_gen_post_sample_contains_requested_entities() -> None:
 # ── Email safe domain ──────────────────────────────────────────────────────
 def test_gen_email_uses_reserved_domain_only() -> None:
     g = SyntheticPIIGenerator(seed=42)
-    banned = ("gmail.com", "naver.com", "kakao.com", "example.com", "daum.net")
+    # `example.com` is RFC 2606 reserved-for-documentation and is one of
+    # the generator's safe domains (alongside `test.local`); only real
+    # consumer-mail providers must stay out of synthetic data.
+    banned = ("gmail.com", "naver.com", "kakao.com", "daum.net")
     for _ in range(200):
         email = g.gen_email()
         for b in banned:
