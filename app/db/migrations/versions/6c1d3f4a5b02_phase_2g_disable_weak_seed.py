@@ -9,6 +9,7 @@ MIN_REPORTABLE_SCORE floor (0.50) are kept in the catalogue but start
 ``enabled=false`` so they don't add registry overhead until an operator
 opts them in via ``python -m app.cli pattern enable <id>``.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,8 +19,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = '6c1d3f4a5b02'
-down_revision: Union[str, Sequence[str], None] = '5b0c2e3f4a01'
+revision: str = "6c1d3f4a5b02"
+down_revision: Union[str, Sequence[str], None] = "5b0c2e3f4a01"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -58,11 +59,7 @@ def upgrade() -> None:
             sort_keys=True,
         )
         conn.execute(
-            sa.text(
-                "UPDATE pii.pii_patterns "
-                "SET enabled = false, version = :v "
-                "WHERE id = :id"
-            ),
+            sa.text("UPDATE pii.pii_patterns SET enabled = false, version = :v WHERE id = :id"),
             {"v": new_version, "id": row.id},
         )
         conn.execute(

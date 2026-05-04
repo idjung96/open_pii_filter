@@ -67,7 +67,11 @@ def _install_transport(
 
 
 def _make_attachment(
-    *, attachment_id: str, filename: str, mime_type: str, payload: bytes,
+    *,
+    attachment_id: str,
+    filename: str,
+    mime_type: str,
+    payload: bytes,
     fetch_url: str | None = None,
 ) -> Attachment:
     return Attachment(
@@ -103,7 +107,8 @@ def _flush_idempotency_cache() -> None:
 
 # ── T4.13: PDF attachment → 202 + ACK-3001 + job_id ───────────────────────
 async def test_t4_13_post_with_pdf_attachment_returns_202(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pdf = make_text_pdf()
     attachment = _make_attachment(
@@ -166,7 +171,8 @@ async def test_t4_14_body_block_skips_attachments(
 
 # ── T4.15: small text attachment still goes async ─────────────────────────
 async def test_t4_15_text_attachment_routes_async(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     txt = make_text_file()
     attachment = _make_attachment(
@@ -212,7 +218,8 @@ async def test_t4_16_attachment_without_callback_url(
 
 # ── T4.17: GET /v1/jobs/{job_id} returns status ───────────────────────────
 async def test_t4_17_get_job_status(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pdf = make_text_pdf()
     attachment = _make_attachment(
@@ -274,9 +281,7 @@ async def test_t4_18_webhook_hmac_verifies(
         code="OK-0000",
         user_message="ok",
         attachment_results=[],
-        completed_at=__import__(
-            "datetime"
-        ).datetime.now(tz=__import__("datetime").UTC),
+        completed_at=__import__("datetime").datetime.now(tz=__import__("datetime").UTC),
     )
     delivered = await send_webhook(
         "https://callback.example.com/hook",
@@ -293,14 +298,13 @@ async def test_t4_18_webhook_hmac_verifies(
         f"/hook\n"
         f"{hashlib.sha256(captured['body']).hexdigest()}"
     )
-    expected = hmac.new(
-        b"s3cret", canonical.encode(), hashlib.sha256
-    ).hexdigest()
+    expected = hmac.new(b"s3cret", canonical.encode(), hashlib.sha256).hexdigest()
     assert headers["x-signature"] == expected
 
 
 def _settings_with(**overrides):  # type: ignore[no-untyped-def]
     from app.config import Settings
+
     base = Settings().model_dump()
     base.update(overrides)
     return Settings(**base)
@@ -332,13 +336,9 @@ async def test_t4_19_webhook_payload_schema(
                 code="OK-0000",
             )
         ],
-        completed_at=__import__(
-            "datetime"
-        ).datetime.now(tz=__import__("datetime").UTC),
+        completed_at=__import__("datetime").datetime.now(tz=__import__("datetime").UTC),
     )
-    ok = await send_webhook(
-        "https://callback.example.com/hook", payload, signing_secret=""
-    )
+    ok = await send_webhook("https://callback.example.com/hook", payload, signing_secret="")
     assert ok is True
     parsed = WebhookPayload.model_validate(json.loads(captured["body"]))
     assert parsed.code == "WARN-1099"
@@ -370,9 +370,7 @@ async def test_t4_20_webhook_retries_on_5xx(
         code="OK-0000",
         user_message="ok",
         attachment_results=[],
-        completed_at=__import__(
-            "datetime"
-        ).datetime.now(tz=__import__("datetime").UTC),
+        completed_at=__import__("datetime").datetime.now(tz=__import__("datetime").UTC),
     )
     ok = await send_webhook(
         "https://callback.example.com/hook",
@@ -405,9 +403,7 @@ async def test_webhook_gives_up_after_max_attempts(
         code="OK-0000",
         user_message="ok",
         attachment_results=[],
-        completed_at=__import__(
-            "datetime"
-        ).datetime.now(tz=__import__("datetime").UTC),
+        completed_at=__import__("datetime").datetime.now(tz=__import__("datetime").UTC),
     )
     ok = await send_webhook(
         "https://callback.example.com/hook",
@@ -421,7 +417,8 @@ async def test_webhook_gives_up_after_max_attempts(
 
 # ── T4.21: job retention — DB row is queryable ────────────────────────────
 async def test_t4_21_job_row_retained(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pdf = make_text_pdf()
     attachment = _make_attachment(
@@ -485,27 +482,32 @@ async def test_t4_22_worker_cancellation_resilience(
     sm = get_sessionmaker()
     job_id = f"job_{uuid.uuid4().hex[:12]}"
     from app.db.models import ExtractionJob
+
     async with sm() as s:
-        s.add(ExtractionJob(
-            job_id=job_id,
-            request_id=str(uuid.uuid4()),
-            callback_url=None,
-            status="PENDING",
-            body_code="OK-0000",
-            body_verdict="PASS",
-        ))
+        s.add(
+            ExtractionJob(
+                job_id=job_id,
+                request_id=str(uuid.uuid4()),
+                callback_url=None,
+                status="PENDING",
+                body_code="OK-0000",
+                body_verdict="PASS",
+            )
+        )
         await s.commit()
 
-    task = asyncio.create_task(process_attachment_job(
-        job_id=job_id,
-        request_id=uuid.uuid4(),
-        attachments=[attachment],
-        callback_url=None,
-        body_code="OK-0000",
-        body_verdict="PASS",
-        strictness="medium",
-        sessionmaker=sm,
-    ))
+    task = asyncio.create_task(
+        process_attachment_job(
+            job_id=job_id,
+            request_id=uuid.uuid4(),
+            attachments=[attachment],
+            callback_url=None,
+            body_code="OK-0000",
+            body_verdict="PASS",
+            strictness="medium",
+            sessionmaker=sm,
+        )
+    )
     await asyncio.sleep(0.2)
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
@@ -519,15 +521,17 @@ async def test_t4_22_worker_cancellation_resilience(
     assert job.status in {"PENDING", "PROCESSING"}
     # Cleanup
     async with sm() as s:
-        await s.execute(__import__("sqlalchemy").text(
-            "DELETE FROM pii.extraction_jobs WHERE job_id = :j"
-        ), {"j": job_id})
+        await s.execute(
+            __import__("sqlalchemy").text("DELETE FROM pii.extraction_jobs WHERE job_id = :j"),
+            {"j": job_id},
+        )
         await s.commit()
 
 
 # ── T4.23: duplicate request_id with attachments → cached 202 ─────────────
 async def test_t4_23_idempotent_case_c(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pdf = make_text_pdf()
     attachment = _make_attachment(
@@ -564,12 +568,16 @@ def test_decide_attachment_code_block_takes_precedence() -> None:
 
     dets = [
         Detection(
-            field="attachment.x", entity_type="KR_PHONE",
-            code="WARN-1001", score=0.7,
+            field="attachment.x",
+            entity_type="KR_PHONE",
+            code="WARN-1001",
+            score=0.7,
         ),
         Detection(
-            field="attachment.x", entity_type="KR_RRN",
-            code="BLOCK-2001", score=0.95,
+            field="attachment.x",
+            entity_type="KR_RRN",
+            code="BLOCK-2001",
+            score=0.95,
         ),
     ]
     code, verdict = _decide_attachment_code(dets)
@@ -580,7 +588,9 @@ def test_decide_attachment_code_block_takes_precedence() -> None:
 def test_overall_verdict_block_winner() -> None:
     results = [
         WebhookAttachmentResult(
-            attachment_id="a", filename="x", verdict=Verdict.BLOCK,
+            attachment_id="a",
+            filename="x",
+            verdict=Verdict.BLOCK,
             code="BLOCK-2010",
         ),
     ]

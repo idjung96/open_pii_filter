@@ -74,7 +74,12 @@ def _signed_headers(
     ts = str(int(time.time()))
     n = uuid.uuid4().hex
     sig = compute_signature(
-        secret=secret, timestamp=ts, nonce=n, method=method, path=path, body=body,
+        secret=secret,
+        timestamp=ts,
+        nonce=n,
+        method=method,
+        path=path,
+        body=body,
     )
     return {
         "content-type": "application/json",
@@ -122,17 +127,18 @@ class BodyOnlyUser(HttpUser):
     def on_start(self) -> None:
         self._key_id = os.environ.get("PII_LOAD_API_KEY")
         self._secret = os.environ.get("PII_LOAD_API_SECRET")
-        self._rng = SyntheticPIIGenerator(
-            seed=random.randint(1, 1_000_000)
-        )
+        self._rng = SyntheticPIIGenerator(seed=random.randint(1, 1_000_000))
 
     @task
     def post_detect(self) -> None:
         body = _gen_body(rng=self._rng)
         raw = json.dumps(body).encode("utf-8")
         headers = _signed_headers(
-            key_id=self._key_id, secret=self._secret,
-            method="POST", path="/v1/detect/post", body=raw,
+            key_id=self._key_id,
+            secret=self._secret,
+            method="POST",
+            path="/v1/detect/post",
+            body=raw,
         )
         with self.client.post(
             "/v1/detect/post",
@@ -144,9 +150,7 @@ class BodyOnlyUser(HttpUser):
             if resp.status_code in {200, 202}:
                 resp.success()
             else:
-                resp.failure(
-                    f"unexpected status {resp.status_code}: {resp.text[:120]}"
-                )
+                resp.failure(f"unexpected status {resp.status_code}: {resp.text[:120]}")
 
 
 # ── Attachment traffic — Case C ──────────────────────────────────────────
@@ -161,9 +165,7 @@ class WithAttachmentUser(HttpUser):
     def on_start(self) -> None:
         self._key_id = os.environ.get("PII_LOAD_API_KEY")
         self._secret = os.environ.get("PII_LOAD_API_SECRET")
-        self._rng = SyntheticPIIGenerator(
-            seed=random.randint(1, 1_000_000)
-        )
+        self._rng = SyntheticPIIGenerator(seed=random.randint(1, 1_000_000))
 
     @task
     def post_with_attachment(self) -> None:
@@ -181,8 +183,11 @@ class WithAttachmentUser(HttpUser):
         body["callback_url"] = "https://callback.example.invalid/hook"
         raw = json.dumps(body).encode("utf-8")
         headers = _signed_headers(
-            key_id=self._key_id, secret=self._secret,
-            method="POST", path="/v1/detect/post", body=raw,
+            key_id=self._key_id,
+            secret=self._secret,
+            method="POST",
+            path="/v1/detect/post",
+            body=raw,
         )
         with self.client.post(
             "/v1/detect/post",
@@ -205,9 +210,7 @@ class WithAttachmentUser(HttpUser):
                         if len(_SHARED_JOB_IDS) > 200:
                             del _SHARED_JOB_IDS[:100]
             else:
-                resp.failure(
-                    f"unexpected status {resp.status_code}: {resp.text[:120]}"
-                )
+                resp.failure(f"unexpected status {resp.status_code}: {resp.text[:120]}")
 
 
 # ── Job-poll traffic ─────────────────────────────────────────────────────
@@ -232,8 +235,11 @@ class JobPollUser(HttpUser):
         job_id = random.choice(_SHARED_JOB_IDS)
         path = f"/v1/jobs/{job_id}"
         headers = _signed_headers(
-            key_id=self._key_id, secret=self._secret,
-            method="GET", path=path, body=b"",
+            key_id=self._key_id,
+            secret=self._secret,
+            method="GET",
+            path=path,
+            body=b"",
         )
         with self.client.get(
             path,
@@ -246,9 +252,7 @@ class JobPollUser(HttpUser):
             if resp.status_code in {200, 404}:
                 resp.success()
             else:
-                resp.failure(
-                    f"unexpected status {resp.status_code}: {resp.text[:120]}"
-                )
+                resp.failure(f"unexpected status {resp.status_code}: {resp.text[:120]}")
 
 
 # ── Stats hooks ──────────────────────────────────────────────────────────

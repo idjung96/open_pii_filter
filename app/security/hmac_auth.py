@@ -53,8 +53,8 @@ if TYPE_CHECKING:
 
 
 # Public constants
-TIMESTAMP_WINDOW_SECONDS = 5 * 60       # ±5 minutes per spec
-NONCE_RETENTION_SECONDS = 10 * 60       # vacuum threshold; > 2x window
+TIMESTAMP_WINDOW_SECONDS = 5 * 60  # ±5 minutes per spec
+NONCE_RETENTION_SECONDS = 10 * 60  # vacuum threshold; > 2x window
 
 
 @dataclass(frozen=True)
@@ -82,9 +82,7 @@ class HmacAuthError(Exception):
 
 
 # ── Canonical string + signature ──────────────────────────────────────────
-def _canonical_string(
-    *, timestamp: str, nonce: str, method: str, path: str, body: bytes
-) -> str:
+def _canonical_string(*, timestamp: str, nonce: str, method: str, path: str, body: bytes) -> str:
     body_digest = hashlib.sha256(body).hexdigest()
     return f"{timestamp}\n{nonce}\n{method.upper()}\n{path}\n{body_digest}"
 
@@ -120,9 +118,7 @@ def _check_timestamp(timestamp_header: str, *, now: float | None = None) -> None
         raise HmacAuthError("REQ-4012")
 
 
-async def _claim_nonce(
-    session: AsyncSession, key_id: str, nonce: str
-) -> None:
+async def _claim_nonce(session: AsyncSession, key_id: str, nonce: str) -> None:
     """Insert (key_id, nonce); raises HmacAuthError(REQ-4013) on conflict."""
     stmt = (
         pg_insert(ApiKeyNonce)

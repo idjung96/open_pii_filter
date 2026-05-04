@@ -9,6 +9,7 @@ that raises an exception, enforcing the append-only invariant of the
 audit log. The retention cleanup worker bypasses the trigger by setting
 ``SET LOCAL app.bypass_audit_lock = 'on'`` inside its transaction.
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -18,8 +19,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = '8e1f5d2a9c30'
-down_revision: Union[str, Sequence[str], None] = '5a885a8844a1'
+revision: str = "8e1f5d2a9c30"
+down_revision: Union[str, Sequence[str], None] = "5a885a8844a1"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -27,71 +28,71 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # api_keys.is_admin — gate for /v1/admin/* endpoints (Phase 6).
     op.add_column(
-        'api_keys',
+        "api_keys",
         sa.Column(
-            'is_admin',
+            "is_admin",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text('false'),
+            server_default=sa.text("false"),
         ),
-        schema='pii',
+        schema="pii",
     )
 
     op.create_table(
-        'audit_events',
-        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column('request_id', sa.String(length=64), nullable=False),
+        "audit_events",
+        sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column("request_id", sa.String(length=64), nullable=False),
         sa.Column(
-            'occurred_at',
+            "occurred_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text('now()'),
+            server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.Column('api_key_id', sa.String(length=64), nullable=True),
-        sa.Column('source_ip', sa.String(length=45), nullable=False),
-        sa.Column('method', sa.String(length=8), nullable=False),
-        sa.Column('path', sa.String(length=256), nullable=False),
-        sa.Column('http_status', sa.Integer(), nullable=True),
-        sa.Column('response_code', sa.String(length=16), nullable=True),
+        sa.Column("api_key_id", sa.String(length=64), nullable=True),
+        sa.Column("source_ip", sa.String(length=45), nullable=False),
+        sa.Column("method", sa.String(length=8), nullable=False),
+        sa.Column("path", sa.String(length=256), nullable=False),
+        sa.Column("http_status", sa.Integer(), nullable=True),
+        sa.Column("response_code", sa.String(length=16), nullable=True),
         sa.Column(
-            'detected_entity_count',
+            "detected_entity_count",
             sa.Integer(),
             nullable=False,
-            server_default=sa.text('0'),
+            server_default=sa.text("0"),
         ),
-        sa.Column('detected_entity_types', sa.Text(), nullable=True),
-        sa.Column('processing_ms', sa.Integer(), nullable=True),
-        sa.Column('body_hash', sa.String(length=64), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
-        schema='pii',
+        sa.Column("detected_entity_types", sa.Text(), nullable=True),
+        sa.Column("processing_ms", sa.Integer(), nullable=True),
+        sa.Column("body_hash", sa.String(length=64), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        schema="pii",
     )
     op.create_index(
-        op.f('ix_pii_audit_events_request_id'),
-        'audit_events',
-        ['request_id'],
+        op.f("ix_pii_audit_events_request_id"),
+        "audit_events",
+        ["request_id"],
         unique=False,
-        schema='pii',
+        schema="pii",
     )
     op.create_index(
-        op.f('ix_pii_audit_events_occurred_at'),
-        'audit_events',
-        ['occurred_at'],
+        op.f("ix_pii_audit_events_occurred_at"),
+        "audit_events",
+        ["occurred_at"],
         unique=False,
-        schema='pii',
+        schema="pii",
     )
     op.create_index(
-        op.f('ix_pii_audit_events_api_key_id'),
-        'audit_events',
-        ['api_key_id'],
+        op.f("ix_pii_audit_events_api_key_id"),
+        "audit_events",
+        ["api_key_id"],
         unique=False,
-        schema='pii',
+        schema="pii",
     )
     op.create_index(
-        'ix_pii_audit_events_apikey_occurred',
-        'audit_events',
-        ['api_key_id', sa.text('occurred_at DESC')],
+        "ix_pii_audit_events_apikey_occurred",
+        "audit_events",
+        ["api_key_id", sa.text("occurred_at DESC")],
         unique=False,
-        schema='pii',
+        schema="pii",
     )
 
     # Append-only trigger function. The cleanup worker sets
@@ -132,24 +133,24 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS trg_audit_no_delete ON pii.audit_events;")
     op.execute("DROP FUNCTION IF EXISTS pii.reject_audit_mutation();")
     op.drop_index(
-        'ix_pii_audit_events_apikey_occurred',
-        table_name='audit_events',
-        schema='pii',
+        "ix_pii_audit_events_apikey_occurred",
+        table_name="audit_events",
+        schema="pii",
     )
     op.drop_index(
-        op.f('ix_pii_audit_events_api_key_id'),
-        table_name='audit_events',
-        schema='pii',
+        op.f("ix_pii_audit_events_api_key_id"),
+        table_name="audit_events",
+        schema="pii",
     )
     op.drop_index(
-        op.f('ix_pii_audit_events_occurred_at'),
-        table_name='audit_events',
-        schema='pii',
+        op.f("ix_pii_audit_events_occurred_at"),
+        table_name="audit_events",
+        schema="pii",
     )
     op.drop_index(
-        op.f('ix_pii_audit_events_request_id'),
-        table_name='audit_events',
-        schema='pii',
+        op.f("ix_pii_audit_events_request_id"),
+        table_name="audit_events",
+        schema="pii",
     )
-    op.drop_table('audit_events', schema='pii')
-    op.drop_column('api_keys', 'is_admin', schema='pii')
+    op.drop_table("audit_events", schema="pii")
+    op.drop_column("api_keys", "is_admin", schema="pii")

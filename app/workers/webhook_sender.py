@@ -40,9 +40,7 @@ RETRY_DELAYS_SECONDS: tuple[float, ...] = (1.0, 4.0, 16.0, 64.0, 256.0)
 MAX_ATTEMPTS = len(RETRY_DELAYS_SECONDS)
 
 
-def _canonical_string(
-    *, timestamp: str, nonce: str, method: str, path: str, body: bytes
-) -> str:
+def _canonical_string(*, timestamp: str, nonce: str, method: str, path: str, body: bytes) -> str:
     """Mirror of ``app.security.hmac_auth._canonical_string``."""
     body_digest = hashlib.sha256(body).hexdigest()
     return f"{timestamp}\n{nonce}\n{method.upper()}\n{path}\n{body_digest}"
@@ -52,12 +50,8 @@ def _sign(secret: str, *, method: str, path: str, body: bytes) -> dict[str, str]
     """Build the X-Timestamp/X-Nonce/X-Signature header trio."""
     ts = str(int(time.time()))
     nonce = secrets.token_hex(16)
-    canonical = _canonical_string(
-        timestamp=ts, nonce=nonce, method=method, path=path, body=body
-    )
-    sig = hmac.new(
-        secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
+    canonical = _canonical_string(timestamp=ts, nonce=nonce, method=method, path=path, body=body)
+    sig = hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
     return {"X-Timestamp": ts, "X-Nonce": nonce, "X-Signature": sig}
 
 
@@ -99,19 +93,18 @@ async def send_webhook(
 
         headers: dict[str, str] = {"content-type": "application/json"}
         if secret:
-            headers.update(
-                _sign(secret, method="POST", path=path, body=body_bytes)
-            )
+            headers.update(_sign(secret, method="POST", path=path, body=body_bytes))
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(
-                    callback_url, content=body_bytes, headers=headers
-                )
+                resp = await client.post(callback_url, content=body_bytes, headers=headers)
         except (httpx.TimeoutException, httpx.HTTPError) as e:
             logger.warning(
                 "webhook attempt %d/%d to %s failed: %s",
-                attempt + 1, MAX_ATTEMPTS, callback_url, e,
+                attempt + 1,
+                MAX_ATTEMPTS,
+                callback_url,
+                e,
             )
             continue
 
@@ -120,12 +113,16 @@ async def send_webhook(
         if not _is_retryable(resp.status_code):
             logger.warning(
                 "webhook to %s gave non-retryable %d; giving up",
-                callback_url, resp.status_code,
+                callback_url,
+                resp.status_code,
             )
             return False
         logger.warning(
             "webhook attempt %d/%d to %s gave %d; retrying",
-            attempt + 1, MAX_ATTEMPTS, callback_url, resp.status_code,
+            attempt + 1,
+            MAX_ATTEMPTS,
+            callback_url,
+            resp.status_code,
         )
 
     return False

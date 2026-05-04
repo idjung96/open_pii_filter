@@ -33,13 +33,9 @@ async def job_cleanup_loop(
     while True:
         try:
             async with sm() as session:
-                deleted = await cleanup_expired_jobs(
-                    session, retention_hours=retention_hours
-                )
+                deleted = await cleanup_expired_jobs(session, retention_hours=retention_hours)
                 if deleted:
-                    logger.info(
-                        "job_cleanup: deleted %d expired jobs", deleted
-                    )
+                    logger.info("job_cleanup: deleted %d expired jobs", deleted)
         except asyncio.CancelledError:
             raise
         except Exception:

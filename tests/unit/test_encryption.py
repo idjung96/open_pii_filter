@@ -37,7 +37,7 @@ def _settings_with(**overrides):  # type: ignore[no-untyped-def]
 
 
 def test_round_trip_simple() -> None:
-    plaintext = "주민등록번호 010101-1234567"   # synthetic
+    plaintext = "주민등록번호 010101-1234567"  # synthetic
     ct = encryption.encrypt_str(plaintext)
     assert ct  # non-empty
     assert ct != plaintext
@@ -113,6 +113,7 @@ def test_old_keys_decrypt_after_rotation(monkeypatch: pytest.MonkeyPatch) -> Non
     # Rotate: new master key, kid=2; v1 retained as retired key.
     v2_key = os.urandom(32).hex()
     import json
+
     monkeypatch.setattr(
         encryption,
         "get_settings",
@@ -144,6 +145,7 @@ def test_unconfigured_key_raises() -> None:
     bad = Settings(**base)
 
     import pytest as _pytest
+
     with _pytest.MonkeyPatch.context() as m:
         m.setattr(encryption, "get_settings", lambda: bad)
         with _pytest.raises(encryption.EncryptionError):

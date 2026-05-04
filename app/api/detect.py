@@ -64,34 +64,38 @@ MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
 # HWP / HWPX 형식 — Linux 런타임에서 파싱 불가 (pyhwpx 가 Windows 전용).
 # 작성자 IP 가 exception_ips 에 등록된 경우에만 첨부 허용 — 이 경우 PII 분석
 # 자체가 우회되므로 파싱이 필요하지 않다. 일반 작성자가 등록 시 REQ-4034.
-HWP_MIME_TYPES = frozenset({
-    "application/hwp+zip",
-    "application/x-hwpx",
-    "application/haansofthwpx",
-    "application/x-hwp",
-    "application/haansofthwp",
-})
+HWP_MIME_TYPES = frozenset(
+    {
+        "application/hwp+zip",
+        "application/x-hwpx",
+        "application/haansofthwpx",
+        "application/x-hwp",
+        "application/haansofthwp",
+    }
+)
 
-SUPPORTED_MIME_TYPES = frozenset({
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/hwp+zip",
-    "application/x-hwpx",
-    "application/haansofthwpx",
-    # HWP 5 binaries pass the size check but the extractor surfaces
-    # REQ-4033 — we accept them at the gateway so the failure carries
-    # the intended user message ("file '<name>' format is unsupported").
-    "application/x-hwp",
-    "application/haansofthwp",
-    "text/plain",
-    # Phase 5 — image OCR
-    "image/jpeg",
-    "image/png",
-    "image/tiff",
-    "image/bmp",
-    "image/webp",
-    "image/gif",
-})
+SUPPORTED_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/hwp+zip",
+        "application/x-hwpx",
+        "application/haansofthwpx",
+        # HWP 5 binaries pass the size check but the extractor surfaces
+        # REQ-4033 — we accept them at the gateway so the failure carries
+        # the intended user message ("file '<name>' format is unsupported").
+        "application/x-hwp",
+        "application/haansofthwp",
+        "text/plain",
+        # Phase 5 — image OCR
+        "image/jpeg",
+        "image/png",
+        "image/tiff",
+        "image/bmp",
+        "image/webp",
+        "image/gif",
+    }
+)
 # Webhook ETA shown to the caller when Case C succeeds (T4.13).
 CASE_C_DEFAULT_ETA_SECONDS = 30
 # Score floor — below this we never surface a detection (matches medium-band PASS).
@@ -126,9 +130,7 @@ def _decide_body_code(detections: list[Detection]) -> str:
 
 
 # ── Detection adapters ────────────────────────────────────────────────────
-def _to_detection(
-    r: RecognizerResult, *, field: str, strictness: str
-) -> Detection:
+def _to_detection(r: RecognizerResult, *, field: str, strictness: str) -> Detection:
     code = map_detection_to_code(
         entity_type=r.entity_type,
         score=r.score,
@@ -218,7 +220,7 @@ def _analyze_field_full(
         return [], set()
     engine = analyzer if analyzer is not None else build_analyzer()
     raw = engine.analyze(text=text, language="ko")
-    raw = _topk_per_span(raw)             # Q2
+    raw = _topk_per_span(raw)  # Q2
 
     pol_rows = policies or []
 
@@ -235,7 +237,8 @@ def _analyze_field_full(
             strictness=strictness,  # type: ignore[arg-type]
         )
         default_band = score_to_band(
-            r.score, strictness  # type: ignore[arg-type]
+            r.score,
+            strictness,  # type: ignore[arg-type]
         )
         default_action = _band_to_action(default_band)
 
@@ -490,36 +493,49 @@ async def detect_post(
         if req.has_attachments:
             if not req.callback_url:
                 return _error(
-                    req, "REQ-4001", started=started, request=request,
+                    req,
+                    "REQ-4001",
+                    started=started,
+                    request=request,
                     fields="callback_url",
                 )
             assert req.attachments is not None
             n_att = len(req.attachments)
             if n_att > MAX_ATTACHMENTS:
                 return _error(
-                    req, "REQ-4032", started=started, request=request,
-                    limit=MAX_ATTACHMENTS, n=n_att,
+                    req,
+                    "REQ-4032",
+                    started=started,
+                    request=request,
+                    limit=MAX_ATTACHMENTS,
+                    n=n_att,
                 )
             for att in req.attachments:
                 if att.size_bytes > MAX_ATTACHMENT_BYTES:
                     return _error(
-                        req, "REQ-4031", started=started, request=request,
+                        req,
+                        "REQ-4031",
+                        started=started,
+                        request=request,
                         filename=att.filename,
                         limit=MAX_ATTACHMENT_MB,
                     )
                 if att.mime_type not in SUPPORTED_MIME_TYPES:
                     return _error(
-                        req, "REQ-4033", started=started, request=request,
+                        req,
+                        "REQ-4033",
+                        started=started,
+                        request=request,
                         filename=att.filename,
                         mime_type=att.mime_type,
                     )
                 # HWP/HWPX 는 Linux 에서 파싱 불가 — 예외 IP 작성자만 허용.
-                if (
-                    att.mime_type in HWP_MIME_TYPES
-                    and not is_exception_ip(req.author.ip or "")
-                ):
+                if att.mime_type in HWP_MIME_TYPES and not is_exception_ip(req.author.ip or ""):
                     return _error(
-                        req, "REQ-4034", started=started, request=request,
+                        req,
+                        "REQ-4034",
+                        started=started,
+                        request=request,
                         filename=att.filename,
                         mime_type=att.mime_type,
                         author_ip=req.author.ip or "",
@@ -572,8 +588,11 @@ async def detect_post(
             )
             cache.complete(req.request_id, response)
             return _envelope(
-                response, request=request, detections=all_dets,
-                log_only_types=log_only_types, shadow_hit_types=shadow_types,
+                response,
+                request=request,
+                detections=all_dets,
+                log_only_types=log_only_types,
+                shadow_hit_types=shadow_types,
             )
 
         # ── Case B: body PASS, no attachments → immediate ─────────────
@@ -586,15 +605,23 @@ async def detect_post(
             )
             cache.complete(req.request_id, response)
             return _envelope(
-                response, request=request, detections=all_dets,
-                log_only_types=log_only_types, shadow_hit_types=shadow_types,
+                response,
+                request=request,
+                detections=all_dets,
+                log_only_types=log_only_types,
+                shadow_hit_types=shadow_types,
             )
 
         # ── Case C: body PASS + attachments → async (T4.13~T4.16) ─────
         return await _enqueue_attachment_job(
-            req, body_code=body_code, body_dets=all_dets, started=started,
-            cache=cache, request=request,
-            log_only_types=log_only_types, shadow_hit_types=shadow_types,
+            req,
+            body_code=body_code,
+            body_dets=all_dets,
+            started=started,
+            cache=cache,
+            request=request,
+            log_only_types=log_only_types,
+            shadow_hit_types=shadow_types,
         )
 
     except Exception:
@@ -619,12 +646,8 @@ async def _run_shadow(
     if shadow_analyzer is None:
         return set()
     try:
-        title_hits = await asyncio.to_thread(
-            shadow_analyzer.analyze, req.post.title, language="ko"
-        )
-        body_hits = await asyncio.to_thread(
-            shadow_analyzer.analyze, req.post.body, language="ko"
-        )
+        title_hits = await asyncio.to_thread(shadow_analyzer.analyze, req.post.title, language="ko")
+        body_hits = await asyncio.to_thread(shadow_analyzer.analyze, req.post.body, language="ko")
     except Exception:
         return set()
     shadow_types: set[str] = set()
@@ -690,9 +713,7 @@ async def _enqueue_attachment_job(
         name=f"pii-job-{job_id}",
     )
 
-    body_result = BodyResult(
-        verdict=body_rc.verdict, code=body_code, detections=body_dets
-    )
+    body_result = BodyResult(verdict=body_rc.verdict, code=body_code, detections=body_dets)
     job_info = JobInfo(
         job_id=job_id,
         status_url=f"/v1/jobs/{job_id}",
@@ -710,6 +731,9 @@ async def _enqueue_attachment_job(
     )
     cache.complete(req.request_id, response)
     return _envelope(
-        response, request=request, detections=body_dets,
-        log_only_types=log_only_types, shadow_hit_types=shadow_hit_types,
+        response,
+        request=request,
+        detections=body_dets,
+        log_only_types=log_only_types,
+        shadow_hit_types=shadow_hit_types,
     )

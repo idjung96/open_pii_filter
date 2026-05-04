@@ -9,6 +9,7 @@ on every INSERT/UPDATE/DELETE on pii_patterns and pii_deny_list. The
 worker subscribes to this channel; on disconnect it falls back to
 polling `max(updated_at)`.
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -16,8 +17,8 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = '5b0c2e3f4a01'
-down_revision: Union[str, Sequence[str], None] = '4a7f8b1c0d92'
+revision: str = "5b0c2e3f4a01"
+down_revision: Union[str, Sequence[str], None] = "4a7f8b1c0d92"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

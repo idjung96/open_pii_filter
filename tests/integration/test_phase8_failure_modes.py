@@ -69,9 +69,7 @@ async def test_pg_down_body_detect_still_returns_200(
 
     app.dependency_overrides[require_auth] = _stub_caller
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/v1/detect/post",
                 json={
@@ -105,9 +103,7 @@ async def test_redis_down_does_not_break_detect(
 
     app.dependency_overrides[require_auth] = _stub_caller
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/v1/detect/post",
                 json={
@@ -159,9 +155,7 @@ async def test_readyz_reports_db_failure(
 
     monkeypatch.setattr(health_mod, "_check_db", boom_db)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/readyz")
     assert resp.status_code == 503
     body = resp.json()
@@ -171,9 +165,7 @@ async def test_readyz_reports_db_failure(
 
 # ── /healthz always returns 200 (liveness is "process is up") ─────────────
 async def test_healthz_always_200_no_io() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/healthz")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"

@@ -58,20 +58,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     tasks: list[asyncio.Task[None]] = []
     if get_settings().app_env != "test":
-        tasks.append(
-            asyncio.create_task(nonce_vacuum_loop(), name="pii-nonce-vacuum")
-        )
-        tasks.append(
-            asyncio.create_task(job_cleanup_loop(), name="pii-job-cleanup")
-        )
-        tasks.append(
-            asyncio.create_task(audit_cleanup_loop(), name="pii-audit-cleanup")
-        )
-        tasks.append(
-            asyncio.create_task(
-                feedback_alerter_loop(), name="pii-feedback-alerter"
-            )
-        )
+        tasks.append(asyncio.create_task(nonce_vacuum_loop(), name="pii-nonce-vacuum"))
+        tasks.append(asyncio.create_task(job_cleanup_loop(), name="pii-job-cleanup"))
+        tasks.append(asyncio.create_task(audit_cleanup_loop(), name="pii-audit-cleanup"))
+        tasks.append(asyncio.create_task(feedback_alerter_loop(), name="pii-feedback-alerter"))
         logger.info("started %d background tasks", len(tasks))
 
     try:
@@ -107,9 +97,7 @@ app.add_middleware(AuditMiddleware)
 
 
 @app.exception_handler(EnvelopeHTTPException)
-async def _envelope_handler(
-    _request: Request, exc: EnvelopeHTTPException
-) -> JSONResponse:
+async def _envelope_handler(_request: Request, exc: EnvelopeHTTPException) -> JSONResponse:
     """Q3 — return the envelope at top level (no `{"detail": ...}` wrap)."""
     return JSONResponse(
         status_code=exc.status_code,
@@ -207,9 +195,7 @@ def _classify_validation(
 
     # Author-specific shape errors
     if any(len(loc) >= 2 and loc[1] == "author" for loc in locs):
-        bad = next(
-            (loc for loc in locs if len(loc) >= 3 and loc[1] == "author"), None
-        )
+        bad = next((loc for loc in locs if len(loc) >= 3 and loc[1] == "author"), None)
         field = bad[2] if bad is not None and len(bad) >= 3 else "?"
         return "REQ-4002", {"field": str(field)}
 

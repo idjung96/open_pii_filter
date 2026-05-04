@@ -183,7 +183,8 @@ async def _process_one_attachment(
         # Image branch — OCR + analyze.
         if attachment.mime_type in IMAGE_MIME_TYPES:
             return await _process_image(
-                attachment, data,
+                attachment,
+                data,
                 strictness=strictness,
                 analyzer=analyzer,
             )
@@ -194,7 +195,8 @@ async def _process_one_attachment(
             text, is_scan = await extract_pdf(data, attachment.filename)
             if is_scan:
                 return await _process_scan_pdf(
-                    attachment, data,
+                    attachment,
+                    data,
                     strictness=strictness,
                     analyzer=analyzer,
                 )
@@ -241,9 +243,7 @@ async def _process_one_attachment(
             detections=[],
         )
     except Exception:
-        logger.exception(
-            "unexpected error processing attachment %s", attachment.filename
-        )
+        logger.exception("unexpected error processing attachment %s", attachment.filename)
         return WebhookAttachmentResult(
             attachment_id=attachment.attachment_id,
             filename=attachment.filename,
@@ -356,7 +356,8 @@ async def process_attachment_job(
                 logger.warning(
                     "webhook delivery failed permanently for job %s; result "
                     "still queryable via /v1/jobs/%s",
-                    job_id, job_id,
+                    job_id,
+                    job_id,
                 )
 
     except asyncio.CancelledError:

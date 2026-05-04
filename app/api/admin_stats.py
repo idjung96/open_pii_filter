@@ -131,16 +131,17 @@ async def stats_detections(
                     shadow_counter[(hour, t)] += 1
 
     buckets = [
-        HourlyEntityCount(hour=h, entity_type=t, count=n)
-        for (h, t), n in sorted(counter.items())
+        HourlyEntityCount(hour=h, entity_type=t, count=n) for (h, t), n in sorted(counter.items())
     ]
     shadow_buckets = [
         HourlyEntityCount(hour=h, entity_type=t, count=n)
         for (h, t), n in sorted(shadow_counter.items())
     ]
     return DetectionsStatsResponse(
-        since=since, until=until,
-        buckets=buckets, shadow_buckets=shadow_buckets,
+        since=since,
+        until=until,
+        buckets=buckets,
+        shadow_buckets=shadow_buckets,
     )
 
 

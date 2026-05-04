@@ -22,17 +22,15 @@ PARTICLES = ["와", "과", "은", "는", "이", "가", "을", "를", "에게", "
 
 @pytest.mark.parametrize("particle", PARTICLES)
 async def test_deny_list_matches_with_korean_particle(
-    db_session: AsyncSession, particle: str,
+    db_session: AsyncSession,
+    particle: str,
 ) -> None:
     name = "원효대사"  # synthetic; not a current employee
-    await add_deny_entry(
-        db_session, entity_type="INTERNAL_NAME", value=name, score=0.95
-    )
+    await add_deny_entry(db_session, entity_type="INTERNAL_NAME", value=name, score=0.95)
     analyzer = await build_analyzer_with_deny_list(db_session)
     text = f"{name}{particle} 강연합니다"
     hits = [
-        r for r in analyzer.analyze(text=text, language="ko")
-        if r.entity_type == "INTERNAL_NAME"
+        r for r in analyzer.analyze(text=text, language="ko") if r.entity_type == "INTERNAL_NAME"
     ]
     assert hits, f"deny_list missed {name!r} when followed by particle {particle!r}"
     assert any(text[h.start : h.end] == name for h in hits)

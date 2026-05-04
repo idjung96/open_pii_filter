@@ -168,8 +168,7 @@ async def test_t7_3_add_policy_hot_reloaded(
         "/v1/detect/post",
         json={
             "request_id": request_id_1,
-            "post": {"board_id": "general", "title": "x",
-                     "body": "010-0000-1234 으로 문의주세요."},
+            "post": {"board_id": "general", "title": "x", "body": "010-0000-1234 으로 문의주세요."},
             "author": {"name": "홍길동", "ip": "127.0.0.1"},
             "options": {"strictness": "medium"},
         },
@@ -182,10 +181,14 @@ async def test_t7_3_add_policy_hot_reloaded(
     # require a real loop-bound session).
     async with sm() as s:
         await add_policy(
-            s, entity_type="KR_PHONE",
-            score_min=0.0, score_max=1.0, action="LOG_ONLY",
+            s,
+            entity_type="KR_PHONE",
+            score_min=0.0,
+            score_max=1.0,
+            action="LOG_ONLY",
         )
     from app.core.policy_engine import get_policy_cache
+
     get_policy_cache().request_reload()
 
     request_id_2 = str(uuid.uuid4())
@@ -193,8 +196,7 @@ async def test_t7_3_add_policy_hot_reloaded(
         "/v1/detect/post",
         json={
             "request_id": request_id_2,
-            "post": {"board_id": "general", "title": "x",
-                     "body": "010-0000-1234 으로 문의주세요."},
+            "post": {"board_id": "general", "title": "x", "body": "010-0000-1234 으로 문의주세요."},
             "author": {"name": "홍길동", "ip": "127.0.0.1"},
             "options": {"strictness": "medium"},
         },

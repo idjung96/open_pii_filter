@@ -65,7 +65,12 @@ def _signed_headers(
     ts = str(int(time.time()))
     n = uuid.uuid4().hex
     sig = compute_signature(
-        secret=secret, timestamp=ts, nonce=n, method=method, path=path, body=body,
+        secret=secret,
+        timestamp=ts,
+        nonce=n,
+        method=method,
+        path=path,
+        body=body,
     )
     return {
         "X-API-Key": key_id,
@@ -81,9 +86,7 @@ async def e2e_key(db_session: AsyncSession) -> tuple[str, str]:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
@@ -97,9 +100,7 @@ async def e2e_key(db_session: AsyncSession) -> tuple[str, str]:
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(
-            text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id}
-        )
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id})
         await s.execute(
             text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"),
             {"k": key_id},
@@ -138,10 +139,12 @@ async def test_t8_1_full_async_flow_with_webhook(
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST" and "callback" in request.url.host:
             try:
-                webhook_calls.append({
-                    "url": str(request.url),
-                    "json": request.read().decode("utf-8"),
-                })
+                webhook_calls.append(
+                    {
+                        "url": str(request.url),
+                        "json": request.read().decode("utf-8"),
+                    }
+                )
             except Exception:  # pragma: no cover — best-effort capture
                 webhook_calls.append({"url": str(request.url), "json": "<n/a>"})
             return httpx.Response(200)
@@ -160,12 +163,13 @@ async def test_t8_1_full_async_flow_with_webhook(
     }
     raw_body = json.dumps(body).encode("utf-8")
     headers = _signed_headers(
-        key_id=key_id, secret=secret, method="POST",
-        path="/v1/detect/post", body=raw_body,
+        key_id=key_id,
+        secret=secret,
+        method="POST",
+        path="/v1/detect/post",
+        body=raw_body,
     )
-    resp = await client_anon.post(
-        "/v1/detect/post", content=raw_body, headers=headers
-    )
+    resp = await client_anon.post("/v1/detect/post", content=raw_body, headers=headers)
     assert resp.status_code == 202, resp.text
     payload = resp.json()
     assert payload["code"] == "ACK-3001"
@@ -177,16 +181,17 @@ async def test_t8_1_full_async_flow_with_webhook(
     for _ in range(60):
         get_path = f"/v1/jobs/{job_id}"
         h = _signed_headers(
-            key_id=key_id, secret=secret, method="GET", path=get_path,
+            key_id=key_id,
+            secret=secret,
+            method="GET",
+            path=get_path,
         )
         r = await client_anon.get(get_path, headers=h)
         if r.status_code == 200 and r.json()["status"] in {"COMPLETED", "FAILED"}:
             final_status = r.json()["status"]
             break
         await asyncio.sleep(0.05)
-    assert final_status == "COMPLETED", (
-        f"job did not complete; last status={final_status}"
-    )
+    assert final_status == "COMPLETED", f"job did not complete; last status={final_status}"
 
     # The webhook should have been delivered (or attempted) at least once.
     assert webhook_calls, "no webhook POST captured"
@@ -218,23 +223,23 @@ async def test_t8_1_body_only_latency_budget(
         }
         raw_body = json.dumps(body).encode("utf-8")
         headers = _signed_headers(
-            key_id=key_id, secret=secret, method="POST",
-            path="/v1/detect/post", body=raw_body,
+            key_id=key_id,
+            secret=secret,
+            method="POST",
+            path="/v1/detect/post",
+            body=raw_body,
         )
         t0 = time.perf_counter()
-        resp = await client_anon.post(
-            "/v1/detect/post", content=raw_body, headers=headers
-        )
+        resp = await client_anon.post("/v1/detect/post", content=raw_body, headers=headers)
         durations.append(time.perf_counter() - t0)
         assert resp.status_code == 200, resp.text
 
     avg = sum(durations) / len(durations)
     p95 = sorted(durations)[int(len(durations) * 0.95) - 1]
     print(
-        f"\n[T8.1] body-only over {iterations} runs: "
-        f"avg={avg*1000:.1f}ms, p95={p95*1000:.1f}ms"
+        f"\n[T8.1] body-only over {iterations} runs: avg={avg * 1000:.1f}ms, p95={p95 * 1000:.1f}ms"
     )
     # Generous headroom — spec is 200 ms p50, 1 s p95; we assert avg<500 ms
     # to pass on CI/Docker shared hardware. Tighter SLO assertions belong
     # in the load_test_report.md operator deliverable.
-    assert avg < 0.5, f"average latency {avg*1000:.1f}ms exceeds 500ms budget"
+    assert avg < 0.5, f"average latency {avg * 1000:.1f}ms exceeds 500ms budget"

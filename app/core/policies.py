@@ -30,9 +30,9 @@ Strictness = Literal["low", "medium", "high"]
 # Score thresholds per strictness: score >= block_at  ⇒ block, otherwise pass.
 # Phase 9D — 단일 BLOCK 임계값으로 단순화.
 _BLOCK_THRESHOLD: dict[Strictness, float] = {
-    "low":    0.65,
+    "low": 0.65,
     "medium": 0.78,
-    "high":   0.88,
+    "high": 0.88,
 }
 
 

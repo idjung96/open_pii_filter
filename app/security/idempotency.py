@@ -48,9 +48,7 @@ class IdempotencyCache:
         self._ttl = ttl
         self._lock = Lock()
 
-    def reserve(
-        self, request_id: UUID
-    ) -> tuple[ReserveOutcome, DetectPostResponse | None]:
+    def reserve(self, request_id: UUID) -> tuple[ReserveOutcome, DetectPostResponse | None]:
         """Reserve a slot for ``request_id``.
 
         Returns the outcome and, if COMPLETED, the previously cached response.

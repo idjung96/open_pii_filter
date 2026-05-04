@@ -39,9 +39,7 @@ _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # Credit-card-like: 13-19 consecutive digits, optionally separated by space
 # or hyphen in groups of 4. Luhn check is intentionally NOT applied -
 # privacy first, log fidelity second.
-_CARD = re.compile(
-    r"\b(?:\d[ -]?){12,18}\d\b"
-)
+_CARD = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
 
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (_RRN, "[REDACTED-RRN]"),

@@ -53,7 +53,8 @@ async def clean_audit() -> None:
 
 # ── T6.4: audit row inserted per detect call ──────────────────────────────
 async def test_t6_4_detect_request_records_audit_row(
-    client: AsyncClient, clean_audit: None,
+    client: AsyncClient,
+    clean_audit: None,
 ) -> None:
     request_id = str(uuid.uuid4())
     payload = {
@@ -68,9 +69,7 @@ async def test_t6_4_detect_request_records_audit_row(
     for _ in range(50):
         sm = get_sessionmaker()
         async with sm() as session:
-            rows = await list_audit_events(
-                session, request_id=request_id, limit=10
-            )
+            rows = await list_audit_events(session, request_id=request_id, limit=10)
         if rows:
             break
         await asyncio.sleep(0.05)
@@ -93,9 +92,7 @@ async def test_t6_5_audit_log_is_append_only() -> None:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
 
     # Insert one row.
@@ -117,10 +114,7 @@ async def test_t6_5_audit_log_is_append_only() -> None:
     async with sm() as s:
         with pytest.raises(DBAPIError):
             await s.execute(
-                text(
-                    "UPDATE pii.audit_events SET response_code = 'TAMPERED' "
-                    "WHERE id = :id"
-                ),
+                text("UPDATE pii.audit_events SET response_code = 'TAMPERED' WHERE id = :id"),
                 {"id": inserted_id},
             )
             await s.commit()
@@ -192,9 +186,7 @@ async def admin_key(db_session: AsyncSession) -> tuple[str, str]:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
@@ -209,9 +201,7 @@ async def admin_key(db_session: AsyncSession) -> tuple[str, str]:
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(
-            text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id}
-        )
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id})
         await s.execute(
             text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"),
             {"k": key_id},
@@ -226,9 +216,7 @@ async def non_admin_key(db_session: AsyncSession) -> tuple[str, str]:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(
-        get_settings().database_url, poolclass=NullPool, future=True
-    )
+    engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
     async with sm() as s:
         row, secret = await issue_api_key(
@@ -243,9 +231,7 @@ async def non_admin_key(db_session: AsyncSession) -> tuple[str, str]:
         key_id = row.key_id
     yield key_id, secret
     async with sm() as s:
-        await s.execute(
-            text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id}
-        )
+        await s.execute(text("DELETE FROM pii.api_keys WHERE key_id = :k"), {"k": key_id})
         await s.execute(
             text("DELETE FROM pii.api_key_nonces WHERE key_id = :k"),
             {"k": key_id},
@@ -255,9 +241,7 @@ async def non_admin_key(db_session: AsyncSession) -> tuple[str, str]:
     await r.delete(f"rl:apikey:{key_id}:m", f"rl:apikey:{key_id}:h")
 
 
-def _signed_headers(
-    *, key_id: str, secret: str, path: str, body: bytes = b""
-) -> dict[str, str]:
+def _signed_headers(*, key_id: str, secret: str, path: str, body: bytes = b"") -> dict[str, str]:
     ts = str(int(time.time()))
     n = uuid.uuid4().hex
     sig = compute_signature(
@@ -276,9 +260,7 @@ def _signed_headers(
     }
 
 
-def _patch_admin_allowlist(
-    monkeypatch: pytest.MonkeyPatch, *, allowlist: str
-) -> None:
+def _patch_admin_allowlist(monkeypatch: pytest.MonkeyPatch, *, allowlist: str) -> None:
     """Patch every module that already imported ``get_settings`` so the
     new allowlist value is observed everywhere.
     """
@@ -300,11 +282,13 @@ def _admin_app(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
     import importlib
 
     import app.main as main_mod
+
     importlib.reload(main_mod)
     # The reloaded module re-imports get_settings, so re-patch.
     fake = lambda: _settings_with(admin_ip_allowlist="127.0.0.0/8")  # noqa: E731
     monkeypatch.setattr(main_mod, "get_settings", fake)
     import app.api.admin_audit as adm_mod
+
     monkeypatch.setattr(adm_mod, "get_settings", fake)
     return main_mod.app
 
@@ -314,6 +298,7 @@ def _no_admin_app(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-d
     import importlib
 
     import app.main as main_mod
+
     importlib.reload(main_mod)
     fake = lambda: _settings_with(admin_ip_allowlist="")  # noqa: E731
     monkeypatch.setattr(main_mod, "get_settings", fake)
@@ -344,9 +329,7 @@ async def test_admin_endpoint_with_admin_key_returns_events(
             response_code="OK-0000",
         )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/audit-events"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -365,9 +348,7 @@ async def test_admin_endpoint_with_non_admin_key_403(
 
     key_id, secret = non_admin_key
     app = _admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/audit-events"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -389,6 +370,7 @@ async def test_admin_endpoint_disallowed_ip_403(
     import importlib
 
     import app.main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 
@@ -396,11 +378,10 @@ async def test_admin_endpoint_disallowed_ip_403(
     fake = lambda: _settings_with(admin_ip_allowlist="10.0.0.0/8")  # noqa: E731
     monkeypatch.setattr("app.config.get_settings", fake)
     import app.api.admin_audit as adm_mod
+
     monkeypatch.setattr(adm_mod, "get_settings", fake)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         path = "/v1/admin/audit-events"
         headers = _signed_headers(key_id=key_id, secret=secret, path=path)
         resp = await c.get(path, headers=headers)
@@ -415,9 +396,7 @@ async def test_admin_endpoint_not_mounted_when_allowlist_empty(
     from httpx import ASGITransport, AsyncClient
 
     app = _no_admin_app(monkeypatch)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/v1/admin/audit-events")
     assert resp.status_code == 404
 
@@ -450,9 +429,7 @@ async def test_admin_endpoint_pagination(
     key_id, secret = admin_key
     app = _admin_app(monkeypatch)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         # Page 1 — limit=2. HMAC canonical path excludes query string.
         path = "/v1/admin/audit-events"
         url1 = f"{path}?limit=2&api_key_id=paging-test"
@@ -465,10 +442,8 @@ async def test_admin_endpoint_pagination(
 
         # Page 2 — same limit + cursor (re-sign because nonce + timestamp differ).
         from urllib.parse import quote
-        url2 = (
-            f"{path}?limit=2&api_key_id=paging-test"
-            f"&cursor={quote(p1['next_cursor'], safe='')}"
-        )
+
+        url2 = f"{path}?limit=2&api_key_id=paging-test&cursor={quote(p1['next_cursor'], safe='')}"
         headers2 = _signed_headers(key_id=key_id, secret=secret, path=path)
         r2 = await c.get(url2, headers=headers2)
         assert r2.status_code == 200, r2.text

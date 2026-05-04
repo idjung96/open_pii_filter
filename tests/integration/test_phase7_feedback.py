@@ -59,9 +59,7 @@ async def test_t7_4_feedback_creates_row_and_audit(
     # NOT the plaintext email.
     sm = get_sessionmaker()
     async with sm() as s:
-        row = await s.scalar(
-            select(PiiFeedback).where(PiiFeedback.id == body["feedback_id"])
-        )
+        row = await s.scalar(select(PiiFeedback).where(PiiFeedback.id == body["feedback_id"]))
     assert row is not None
     assert row.original_code == "BLOCK-2001"
     assert row.reporter_hash is not None
@@ -96,9 +94,7 @@ async def test_t7_4_feedback_anonymous_uses_ip_hash(
 
     sm = get_sessionmaker()
     async with sm() as s:
-        row = await s.scalar(
-            select(PiiFeedback).where(PiiFeedback.id == body["feedback_id"])
-        )
+        row = await s.scalar(select(PiiFeedback).where(PiiFeedback.id == body["feedback_id"]))
     assert row is not None
     # Hash present even when no email supplied (falls back to source IP).
     assert row.reporter_hash is not None

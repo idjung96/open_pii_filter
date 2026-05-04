@@ -31,6 +31,7 @@ async def test_privacy_notice_substitutes_company_name(
     )
     monkeypatch.setattr("app.config.get_settings", fake)
     import app.api.legal as legal_mod
+
     monkeypatch.setattr(legal_mod, "get_settings", fake)
 
     resp = await client.get("/v1/legal/privacy-notice")
@@ -56,6 +57,7 @@ async def test_privacy_notice_unset_keeps_placeholder(
     )
     monkeypatch.setattr("app.config.get_settings", fake)
     import app.api.legal as legal_mod
+
     monkeypatch.setattr(legal_mod, "get_settings", fake)
 
     resp = await client.get("/v1/legal/privacy-notice")

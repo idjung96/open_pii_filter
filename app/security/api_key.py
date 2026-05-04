@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-KEY_ID_BYTES = 16   # 32 hex chars
-SECRET_BYTES = 32   # 64 hex chars
+KEY_ID_BYTES = 16  # 32 hex chars
+SECRET_BYTES = 32  # 64 hex chars
 
 
 class ApiKeyError(ValueError):
@@ -95,9 +95,7 @@ async def list_keys(session: AsyncSession, *, include_revoked: bool = False) -> 
     return list(rows)
 
 
-async def set_enabled(
-    session: AsyncSession, key_id: str, *, enabled: bool
-) -> ApiKey:
+async def set_enabled(session: AsyncSession, key_id: str, *, enabled: bool) -> ApiKey:
     row = await find_active_key(session, key_id)
     if row is None:
         raise ApiKeyError(f"key_id={key_id} not found")

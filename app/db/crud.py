@@ -27,9 +27,7 @@ if TYPE_CHECKING:
 
 # ── Phase 7 — policy mode/action constants ────────────────────────────────
 POLICY_MODES: frozenset[str] = frozenset({"enabled", "shadow", "disabled"})
-POLICY_ACTIONS: frozenset[str] = frozenset(
-    {"BLOCK", "WARN", "MASK", "LOG_ONLY", "PASS"}
-)
+POLICY_ACTIONS: frozenset[str] = frozenset({"BLOCK", "WARN", "MASK", "LOG_ONLY", "PASS"})
 
 
 class PolicyValidationError(ValueError):
@@ -44,16 +42,12 @@ def validate_score(score: float) -> None:
 
 def validate_mode(value: str) -> None:
     if value not in POLICY_MODES:
-        raise PolicyValidationError(
-            f"mode must be one of {sorted(POLICY_MODES)}; got {value}"
-        )
+        raise PolicyValidationError(f"mode must be one of {sorted(POLICY_MODES)}; got {value}")
 
 
 def validate_action(value: str) -> None:
     if value not in POLICY_ACTIONS:
-        raise PolicyValidationError(
-            f"action must be one of {sorted(POLICY_ACTIONS)}; got {value}"
-        )
+        raise PolicyValidationError(f"action must be one of {sorted(POLICY_ACTIONS)}; got {value}")
 
 
 # ── Deny-list CRUD ────────────────────────────────────────────────────────
@@ -78,9 +72,7 @@ async def add_deny_entry(
     try:
         await session.flush()
     except IntegrityError as e:
-        raise PolicyValidationError(
-            f"duplicate deny entry: ({entity_type}, {value})"
-        ) from e
+        raise PolicyValidationError(f"duplicate deny entry: ({entity_type}, {value})") from e
     return entry
 
 
@@ -110,9 +102,7 @@ async def get_job(session: AsyncSession, job_id: str) -> ExtractionJob | None:
     return await session.get(ExtractionJob, job_id)
 
 
-async def update_job(
-    session: AsyncSession, job_id: str, **fields: Any
-) -> None:
+async def update_job(session: AsyncSession, job_id: str, **fields: Any) -> None:
     """Apply a partial update to an extraction job row.
 
     Unknown columns are silently dropped so callers can pass kwargs that
@@ -130,9 +120,7 @@ async def update_job(
     await session.commit()
 
 
-async def get_job_by_request_id(
-    session: AsyncSession, request_id: str
-) -> ExtractionJob | None:
+async def get_job_by_request_id(session: AsyncSession, request_id: str) -> ExtractionJob | None:
     stmt = (
         select(ExtractionJob)
         .where(ExtractionJob.request_id == request_id)
@@ -143,9 +131,7 @@ async def get_job_by_request_id(
     return result
 
 
-async def cleanup_expired_jobs(
-    session: AsyncSession, *, retention_hours: int = 24
-) -> int:
+async def cleanup_expired_jobs(session: AsyncSession, *, retention_hours: int = 24) -> int:
     """Delete completed/failed jobs whose ``completed_at`` is older than
     ``retention_hours``. Returns the number of rows removed.
     """
@@ -207,9 +193,7 @@ async def insert_audit_event(
     return row
 
 
-async def cleanup_expired_audit_events(
-    session: AsyncSession, *, retention_days: int
-) -> int:
+async def cleanup_expired_audit_events(session: AsyncSession, *, retention_days: int) -> int:
     """Delete audit rows older than ``retention_days``.
 
     The append-only trigger refuses DELETE unless the session has set
@@ -219,9 +203,7 @@ async def cleanup_expired_audit_events(
     """
     cutoff = datetime.now(tz=UTC) - timedelta(days=retention_days)
     await session.execute(text("SET LOCAL app.bypass_audit_lock = 'on'"))
-    res = await session.execute(
-        delete(AuditEvent).where(AuditEvent.occurred_at < cutoff)
-    )
+    res = await session.execute(delete(AuditEvent).where(AuditEvent.occurred_at < cutoff))
     await session.commit()
     return getattr(res, "rowcount", 0) or 0
 
@@ -259,14 +241,11 @@ async def list_audit_events(
         # Strict tuple comparison for keyset pagination.
         stmt = stmt.where(
             (AuditEvent.occurred_at < cursor_occurred_at)
-            | (
-                (AuditEvent.occurred_at == cursor_occurred_at)
-                & (AuditEvent.id < cursor_id)
-            )
+            | ((AuditEvent.occurred_at == cursor_occurred_at) & (AuditEvent.id < cursor_id))
         )
-    stmt = stmt.order_by(
-        AuditEvent.occurred_at.desc(), AuditEvent.id.desc()
-    ).limit(min(max(limit, 1), 500))
+    stmt = stmt.order_by(AuditEvent.occurred_at.desc(), AuditEvent.id.desc()).limit(
+        min(max(limit, 1), 500)
+    )
     rows = await session.scalars(stmt)
     return list(rows)
 
@@ -310,9 +289,7 @@ async def add_policy(
     validate_action(action)
     validate_mode(mode)
     if not (0.0 <= score_min <= score_max <= 1.0):
-        raise PolicyValidationError(
-            f"score band invalid: [{score_min}, {score_max}]"
-        )
+        raise PolicyValidationError(f"score band invalid: [{score_min}, {score_max}]")
 
     row = PiiPolicy(
         entity_type=entity_type,
@@ -334,9 +311,7 @@ async def add_policy(
     return row
 
 
-async def update_policy_mode(
-    session: AsyncSession, policy_id: int, mode: str
-) -> None:
+async def update_policy_mode(session: AsyncSession, policy_id: int, mode: str) -> None:
     """Flip a policy's mode (enabled/shadow/disabled). No-op if missing."""
     validate_mode(mode)
     await session.execute(
@@ -347,9 +322,7 @@ async def update_policy_mode(
     await session.commit()
 
 
-async def get_policy(
-    session: AsyncSession, policy_id: int
-) -> PiiPolicy | None:
+async def get_policy(session: AsyncSession, policy_id: int) -> PiiPolicy | None:
     return await session.get(PiiPolicy, policy_id)
 
 
@@ -398,14 +371,11 @@ async def list_feedback(
     if cursor_created_at is not None and cursor_id is not None:
         stmt = stmt.where(
             (PiiFeedback.created_at < cursor_created_at)
-            | (
-                (PiiFeedback.created_at == cursor_created_at)
-                & (PiiFeedback.id < cursor_id)
-            )
+            | ((PiiFeedback.created_at == cursor_created_at) & (PiiFeedback.id < cursor_id))
         )
-    stmt = stmt.order_by(
-        PiiFeedback.created_at.desc(), PiiFeedback.id.desc()
-    ).limit(min(max(limit, 1), 500))
+    stmt = stmt.order_by(PiiFeedback.created_at.desc(), PiiFeedback.id.desc()).limit(
+        min(max(limit, 1), 500)
+    )
     rows = await session.scalars(stmt)
     return list(rows)
 
@@ -417,9 +387,9 @@ async def count_feedback_by_code(
     until: datetime | None = None,
 ) -> dict[str, int]:
     """Aggregate feedback counts grouped by ``original_code``."""
-    stmt = select(
-        PiiFeedback.original_code, func.count(PiiFeedback.id)
-    ).group_by(PiiFeedback.original_code)
+    stmt = select(PiiFeedback.original_code, func.count(PiiFeedback.id)).group_by(
+        PiiFeedback.original_code
+    )
     if since is not None:
         stmt = stmt.where(PiiFeedback.created_at >= since)
     if until is not None:

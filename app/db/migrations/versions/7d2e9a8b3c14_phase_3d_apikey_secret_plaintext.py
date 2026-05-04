@@ -10,6 +10,7 @@ The legacy 'secret_hash' column is renamed to 'secret'. Existing rows
 hold the old digest value — operators must re-issue keys after this
 migration runs.
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
@@ -17,19 +18,15 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = '7d2e9a8b3c14'
-down_revision: Union[str, Sequence[str], None] = 'ff6df8c4d0ad'
+revision: str = "7d2e9a8b3c14"
+down_revision: Union[str, Sequence[str], None] = "ff6df8c4d0ad"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        'api_keys', 'secret_hash', new_column_name='secret', schema='pii'
-    )
+    op.alter_column("api_keys", "secret_hash", new_column_name="secret", schema="pii")
 
 
 def downgrade() -> None:
-    op.alter_column(
-        'api_keys', 'secret', new_column_name='secret_hash', schema='pii'
-    )
+    op.alter_column("api_keys", "secret", new_column_name="secret_hash", schema="pii")

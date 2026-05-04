@@ -38,8 +38,13 @@ async def test_response_has_no_plaintext_pii(client: AsyncClient) -> None:
     for det in payload_out.get("detections", []):
         assert "text" not in det
         assert set(det.keys()) <= {
-            "field", "entity_type", "code", "score",
-            "start", "end", "masked_preview",
+            "field",
+            "entity_type",
+            "code",
+            "score",
+            "start",
+            "end",
+            "masked_preview",
         }
         # masked_preview, when present, is masked — must never repeat
         # the original digits.
@@ -96,8 +101,15 @@ async def test_user_message_safe_substrings(client: AsyncClient) -> None:
     msg = payload_out.get("user_message", "")
     assert rrn not in msg
     forbidden = (
-        "score", "confidence", "presidio", "spacy", "gliner", "regex",
-        "KR_RRN", "KR_PHONE", "EMAIL_ADDRESS",
+        "score",
+        "confidence",
+        "presidio",
+        "spacy",
+        "gliner",
+        "regex",
+        "KR_RRN",
+        "KR_PHONE",
+        "EMAIL_ADDRESS",
     )
     lowered = msg.lower()
     for f in forbidden:

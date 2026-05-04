@@ -86,10 +86,9 @@ async def main(duration_s: float, concurrency: int) -> dict[str, object]:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            await asyncio.gather(*[
-                _worker(client, deadline, statuses, latencies)
-                for _ in range(concurrency)
-            ])
+            await asyncio.gather(
+                *[_worker(client, deadline, statuses, latencies) for _ in range(concurrency)]
+            )
     finally:
         app.dependency_overrides.pop(require_auth, None)
     elapsed = time.perf_counter() - started

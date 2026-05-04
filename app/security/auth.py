@@ -50,8 +50,13 @@ class EnvelopeHTTPException(HTTPException):
     """
 
 
-def _envelope(code: str, *, status: int = 0, headers: dict[str, str] | None = None,  # noqa: ARG001
-              **vars: object) -> EnvelopeHTTPException:
+def _envelope(
+    code: str,
+    *,
+    status: int = 0,
+    headers: dict[str, str] | None = None,  # noqa: ARG001
+    **vars: object,
+) -> EnvelopeHTTPException:
     from uuid import UUID
 
     rc = get_code(code)
@@ -78,9 +83,7 @@ async def _ip_failure_burst(request: Request) -> None:
 
     settings = get_settings()
     ip = _client_ip(request)
-    outcome = await get_limiter().check_ip(
-        ip=ip, per_minute=settings.ip_rate_per_minute
-    )
+    outcome = await get_limiter().check_ip(ip=ip, per_minute=settings.ip_rate_per_minute)
     if not outcome.allowed:
         observe_rate_limit_rejection(scope="ip")
         raise _envelope(
@@ -107,10 +110,7 @@ async def require_auth(
     from app.security.hmac_auth import _client_ip
 
     no_hmac_headers = (
-        x_api_key is None
-        and x_timestamp is None
-        and x_nonce is None
-        and x_signature is None
+        x_api_key is None and x_timestamp is None and x_nonce is None and x_signature is None
     )
     if no_hmac_headers:
         client_ip = _client_ip(request)

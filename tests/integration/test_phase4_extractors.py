@@ -73,6 +73,7 @@ async def test_t4_2_extract_pdf_scan_only() -> None:
 async def test_t4_3_extract_docx_table_pii() -> None:
     data = make_docx_with_table_pii()
     from app.extractors.docx import extract_docx
+
     text = await extract_docx(data, "table.docx")
     assert SYNTH_PHONE in text
     assert "전화" in text
@@ -110,10 +111,7 @@ async def test_t4_7_too_many_pages() -> None:
 
 
 # ── T4.8: ClamAV EICAR test (skipped if scanner unavailable) ──────────────
-EICAR = (
-    b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR"
-    b"-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
-)
+EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
 
 async def test_t4_8_clamav_eicar_blocks() -> None:

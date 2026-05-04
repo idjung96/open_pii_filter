@@ -54,7 +54,5 @@ def enforce(
     key_allowlist: Iterable[str] | None = None,
     global_allowlist: Iterable[str] | None = None,
 ) -> None:
-    if not is_allowed(
-        ip, key_allowlist=key_allowlist, global_allowlist=global_allowlist
-    ):
+    if not is_allowed(ip, key_allowlist=key_allowlist, global_allowlist=global_allowlist):
         raise IpNotAllowedError(ip)

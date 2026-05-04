@@ -125,18 +125,33 @@ def make_landscape_png() -> bytes:
 def make_multipage_tiff() -> bytes:
     """3-page TIFF; one synthetic PII per page (RRN, phone, email)."""
     pages = [
-        Image.open(io.BytesIO(_text_image(
-            ["Page 1 - SYNTHETIC", f"RRN: {SYNTH_RRN}"],
-            width=700, height=300,
-        ))),
-        Image.open(io.BytesIO(_text_image(
-            ["Page 2 - SYNTHETIC", f"Phone: {SYNTH_PHONE}"],
-            width=700, height=300,
-        ))),
-        Image.open(io.BytesIO(_text_image(
-            ["Page 3 - SYNTHETIC", f"Email: {SYNTH_EMAIL}"],
-            width=700, height=300,
-        ))),
+        Image.open(
+            io.BytesIO(
+                _text_image(
+                    ["Page 1 - SYNTHETIC", f"RRN: {SYNTH_RRN}"],
+                    width=700,
+                    height=300,
+                )
+            )
+        ),
+        Image.open(
+            io.BytesIO(
+                _text_image(
+                    ["Page 2 - SYNTHETIC", f"Phone: {SYNTH_PHONE}"],
+                    width=700,
+                    height=300,
+                )
+            )
+        ),
+        Image.open(
+            io.BytesIO(
+                _text_image(
+                    ["Page 3 - SYNTHETIC", f"Email: {SYNTH_EMAIL}"],
+                    width=700,
+                    height=300,
+                )
+            )
+        ),
     ]
     buf = io.BytesIO()
     pages[0].save(

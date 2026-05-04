@@ -34,10 +34,6 @@ async def test_deny_list_add_and_list(db_session: AsyncSession) -> None:
 
 
 async def test_deny_list_duplicate_rejected(db_session: AsyncSession) -> None:
-    await add_deny_entry(
-        db_session, entity_type="INTERNAL_NAME", value="라마바", score=0.95
-    )
+    await add_deny_entry(db_session, entity_type="INTERNAL_NAME", value="라마바", score=0.95)
     with pytest.raises(PolicyValidationError):
-        await add_deny_entry(
-            db_session, entity_type="INTERNAL_NAME", value="라마바", score=0.95
-        )
+        await add_deny_entry(db_session, entity_type="INTERNAL_NAME", value="라마바", score=0.95)

@@ -34,9 +34,7 @@ def _scan_sync(data: bytes) -> tuple[str, str | None]:
     import clamd  # type: ignore[import-untyped]
 
     settings = get_settings()
-    cd = clamd.ClamdNetworkSocket(
-        host=settings.clamav_host, port=settings.clamav_port, timeout=15
-    )
+    cd = clamd.ClamdNetworkSocket(host=settings.clamav_host, port=settings.clamav_port, timeout=15)
     raw: dict[str, Any] = cd.instream(io.BytesIO(data))
     # clamd returns: {"stream": ("OK"|"FOUND"|"ERROR", signature_or_None)}
     status, signature = raw.get("stream", ("ERROR", "no stream key"))
@@ -55,9 +53,7 @@ async def scan_bytes(data: bytes, filename: str) -> None:
     except Exception as e:
         # Connection refused, timeout, etc.: don't block processing on a
         # scanner outage. Operators are alerted via metrics/logs instead.
-        logger.warning(
-            "clamav unavailable for %s (%s); skipping scan", filename, e
-        )
+        logger.warning("clamav unavailable for %s (%s); skipping scan", filename, e)
         return
 
     if status == "FOUND":
@@ -67,8 +63,6 @@ async def scan_bytes(data: bytes, filename: str) -> None:
             detail=signature or "unknown signature",
         )
     if status == "ERROR":
-        logger.warning(
-            "clamav reported ERROR for %s: %s", filename, signature
-        )
+        logger.warning("clamav reported ERROR for %s: %s", filename, signature)
         return
     return

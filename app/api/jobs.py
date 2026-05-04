@@ -70,13 +70,9 @@ async def get_job_status(
             raw = []
         for entry in raw:
             try:
-                attachment_results.append(
-                    WebhookAttachmentResult.model_validate(entry)
-                )
+                attachment_results.append(WebhookAttachmentResult.model_validate(entry))
             except Exception:
-                logger.warning(
-                    "skipping malformed attachment entry in job %s", job_id
-                )
+                logger.warning("skipping malformed attachment entry in job %s", job_id)
 
     return JobStatusResponse(
         job_id=job.job_id,

@@ -54,6 +54,7 @@ _PII_PATTERNS = [
 def _scrub(text: str, *, max_chars: int = 80) -> str:
     """Mask anything that looks like PII before embedding in an email body."""
     import re
+
     out = text
     for rx in _PII_PATTERNS:
         out = re.sub(rx, "***", out)
@@ -76,9 +77,7 @@ async def _get_state(session: AsyncSession) -> AlerterState | None:
     return await session.get(AlerterState, ALERTER_KEY)
 
 
-async def _record_alert(
-    session: AsyncSession, *, count: int, alerted_at: datetime
-) -> None:
+async def _record_alert(session: AsyncSession, *, count: int, alerted_at: datetime) -> None:
     stmt = (
         pg_insert(AlerterState)
         .values(key=ALERTER_KEY, last_alert_at=alerted_at, last_count=count)
@@ -193,9 +192,7 @@ async def run_once(*, now: datetime | None = None) -> bool:
         by_code = sorted(by_code_counts.items(), key=lambda kv: kv[1], reverse=True)
         reasons = [r.reason for r in rows[:5]]
 
-        recipients = [
-            r.strip() for r in s.alert_email_to.split(",") if r.strip()
-        ]
+        recipients = [r.strip() for r in s.alert_email_to.split(",") if r.strip()]
         sender = s.alert_email_from or recipients[0]
 
         msg = _build_email(
@@ -223,17 +220,13 @@ async def run_once(*, now: datetime | None = None) -> bool:
     return True
 
 
-async def feedback_alerter_loop(
-    *, interval_seconds: int | None = None
-) -> None:
+async def feedback_alerter_loop(*, interval_seconds: int | None = None) -> None:
     """Long-lived alerter loop. Spawned from ``app.main`` lifespan."""
     s = get_settings()
     interval = interval_seconds or s.feedback_alert_interval_seconds
 
     if not s.smtp_host or not s.alert_email_to.strip():
-        logger.warning(
-            "feedback alerter disabled (smtp_host or alert_email_to empty)"
-        )
+        logger.warning("feedback alerter disabled (smtp_host or alert_email_to empty)")
         # Still loop so we re-check after a config reload.
         # Keep cadence cheap.
         interval = max(interval, 300)

@@ -49,9 +49,7 @@ def cmd_issue(
     name: Annotated[str, typer.Option(help="human-readable label")],
     rate_per_minute: Annotated[int, typer.Option(help="default 60")] = 60,
     rate_per_hour: Annotated[int, typer.Option(help="default 1000")] = 1000,
-    ip_allowlist: Annotated[
-        str, typer.Option(help="comma-separated CIDR list, optional")
-    ] = "",
+    ip_allowlist: Annotated[str, typer.Option(help="comma-separated CIDR list, optional")] = "",
     admin: Annotated[
         bool,
         typer.Option(
@@ -82,9 +80,7 @@ def cmd_issue(
     typer.echo("API key issued — capture the secret NOW; it is not recoverable:")
     typer.echo(f"  key_id : {row.key_id}")
     typer.echo(f"  secret : {secret}")
-    typer.echo(
-        f"  rate   : {row.rate_per_minute}/min, {row.rate_per_hour}/hour"
-    )
+    typer.echo(f"  rate   : {row.rate_per_minute}/min, {row.rate_per_hour}/hour")
     if row.is_admin:
         typer.echo("  admin  : YES — keep this key inside the trusted network")
     if row.ip_allowlist:
@@ -99,16 +95,12 @@ def cmd_list(
         return await list_keys(session, include_revoked=include_revoked)
 
     rows = _run(_do)
-    typer.echo(
-        f"{'key_id':<40} {'name':<24} {'rate(min/hr)':<16} {'on':<3} {'revoked'}"
-    )
+    typer.echo(f"{'key_id':<40} {'name':<24} {'rate(min/hr)':<16} {'on':<3} {'revoked'}")
     for r in rows:
         rate = f"{r.rate_per_minute}/{r.rate_per_hour}"
         flag = "Y" if r.enabled else "n"
         rev = r.revoked_at.isoformat() if r.revoked_at else "-"
-        typer.echo(
-            f"{r.key_id:<40} {r.name[:23]:<24} {rate:<16} {flag:<3} {rev}"
-        )
+        typer.echo(f"{r.key_id:<40} {r.name[:23]:<24} {rate:<16} {flag:<3} {rev}")
 
 
 @apikey_app.command("disable")
@@ -144,6 +136,7 @@ def cmd_revoke(
     key_id: Annotated[str, typer.Argument()],
 ) -> None:
     """Permanent revoke (sets revoked_at = now)."""
+
     async def _do(session: AsyncSession) -> ApiKey:
         try:
             return await revoke(session, key_id)
