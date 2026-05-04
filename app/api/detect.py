@@ -45,7 +45,7 @@ from app.db.session import get_sessionmaker
 from app.security.auth import require_auth
 from app.security.hmac_auth import AuthedCaller
 from app.security.idempotency import IdempotencyCache, ReserveOutcome, get_cache
-from app.security.metrics_collector import observe_detection
+from app.security.metrics_collector import observe_detect_request, observe_detection
 
 if TYPE_CHECKING:
     from presidio_analyzer import AnalyzerEngine, RecognizerResult
@@ -329,6 +329,7 @@ def _error(
     )
     if request is not None:
         _stash_audit(request, code=code, detections=[])
+    observe_detect_request(verdict=str(rc.verdict))
     return JSONResponse(status_code=rc.http_status, content=resp.model_dump(mode="json"))
 
 
@@ -349,6 +350,7 @@ def _envelope(
             log_only_types=log_only_types,
             shadow_hit_types=shadow_hit_types,
         )
+    observe_detect_request(verdict=str(rc.verdict))
     return JSONResponse(status_code=rc.http_status, content=resp.model_dump(mode="json"))
 
 

@@ -65,6 +65,51 @@ RATE_LIMIT_REJECTIONS_TOTAL: Counter = Counter(
     labelnames=("scope",),  # 'caller' or 'ip'
 )
 
+# ── Detect endpoint outcome counters ──────────────────────────────────────
+# `verdict` is the response code's terminal verdict — one of
+# {"PASS", "BLOCK", "PROCESSING", "ERROR"}. Sum across verdicts for the
+# total POST /v1/detect/post call count; filter to verdict="BLOCK" for the
+# blocked-call count. WARN is intentionally absent (deprecated since
+# Phase 9D — codes were absorbed into BLOCK or PASS).
+PII_DETECT_REQUESTS_TOTAL: Counter = Counter(
+    "pii_detect_requests_total",
+    "Calls to POST /v1/detect/post grouped by terminal verdict",
+    labelnames=("verdict",),
+)
+
+# ── OCR latency ────────────────────────────────────────────────────────────
+# Buckets cover the spec SLA window for OCR: paddle ~0.5-3 s on CPU, VLM
+# 1-10 s typical, with a 30 s ceiling reflecting the attachment job's
+# overall budget. `engine` carries which backend actually ran ("vlm" or
+# "paddle"); fallback paths label themselves with the engine that handled
+# the request, not the original choice.
+OCR_DURATION_SECONDS: Histogram = Histogram(
+    "ocr_duration_seconds",
+    "Wall-clock duration of a single OCR run, in seconds",
+    labelnames=("engine",),
+    buckets=(0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0),
+)
+
+# ── Attachment size distribution ──────────────────────────────────────────
+# Buckets span 4 KiB → 50 MiB, covering everything from tiny stamps to the
+# Phase-4 hard limit (`MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024`). Observed
+# once per attachment as it enters the per-attachment processor — so the
+# series reflects what callers actually upload, not what gets stored.
+ATTACHMENT_SIZE_BYTES: Histogram = Histogram(
+    "attachment_size_bytes",
+    "Distribution of attachment sizes accepted into the async pipeline",
+    buckets=(
+        4 * 1024,
+        16 * 1024,
+        64 * 1024,
+        256 * 1024,
+        1 * 1024 * 1024,
+        4 * 1024 * 1024,
+        16 * 1024 * 1024,
+        50 * 1024 * 1024,
+    ),
+)
+
 
 def observe_http(
     *,
@@ -105,3 +150,26 @@ def observe_rate_limit_rejection(*, scope: str) -> None:
     """Bump the rate-limit rejection counter for a given scope."""
     with contextlib.suppress(Exception):
         RATE_LIMIT_REJECTIONS_TOTAL.labels(scope=scope).inc()
+
+
+def observe_detect_request(*, verdict: str) -> None:
+    """Tally one POST /v1/detect/post call by its terminal verdict.
+
+    Called from the detect endpoint's response funnels (`_error` for
+    error-class outcomes, `_envelope` for body-evaluated outcomes) so a
+    single call increments the counter exactly once.
+    """
+    with contextlib.suppress(Exception):
+        PII_DETECT_REQUESTS_TOTAL.labels(verdict=verdict).inc()
+
+
+def observe_ocr_duration(*, engine: str, seconds: float) -> None:
+    """Record one OCR engine call's wall-clock duration."""
+    with contextlib.suppress(Exception):
+        OCR_DURATION_SECONDS.labels(engine=engine).observe(seconds)
+
+
+def observe_attachment_size(*, size_bytes: int) -> None:
+    """Record the size, in bytes, of a single attachment entering the pipeline."""
+    with contextlib.suppress(Exception):
+        ATTACHMENT_SIZE_BYTES.observe(size_bytes)
