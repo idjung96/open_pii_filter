@@ -1,0 +1,105 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ r.class }} 편집{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0 small">
+    <li class="breadcrumb-item"><a href="/admin/patterns">패턴</a></li>
+    <li class="breadcrumb-item active">{{ r.class }}</li>
+  </ol>
+</nav>
+
+<h2>패턴 편집 — <code>{{ r.class }}</code></h2>
+<p class="text-muted small mb-3">
+  entity_type:
+  {% for et in r.supported_entities %}<span class="badge bg-dark me-1"><code class="text-white">{{ et }}</code></span>{% endfor %}
+  · 출처: <code>{{ r.module }}</code>
+  {% if r.has_override %}<span class="badge bg-info text-dark ms-2">편집됨</span>{% endif %}
+</p>
+
+{% if error %}
+<div class="alert alert-danger py-2 small">
+  <strong>저장 실패:</strong> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/admin/patterns/edit">
+  <input type="hidden" name="class_name" value="{{ r.class }}">
+
+  <div class="card mb-3">
+    <div class="card-header">
+      <strong>정규식 패턴</strong>
+      <span class="text-muted small ms-2">
+        이름·정규식이 모두 비어 있는 행은 저장 시 제외됩니다. 행을 비워 두면 삭제와 같습니다.
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 22%">이름</th>
+            <th>정규식 (Python <code>re</code> 문법)</th>
+            <th style="width: 12%">score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set existing = r.patterns or [] %}
+          {% set total = (existing|length) + 3 %}
+          {% for i in range(total) %}
+            {% set p = existing[i] if i < (existing|length) else {'name': '', 'regex': '', 'score': 0.5} %}
+            <tr>
+              <td>
+                <input type="text" class="form-control form-control-sm font-monospace"
+                       name="pattern_name" value="{{ p.name }}" placeholder="패턴 이름">
+              </td>
+              <td>
+                <input type="text" class="form-control form-control-sm font-monospace"
+                       name="pattern_regex" value="{{ p.regex }}" placeholder="(?<!\d)\d{6}-...">
+              </td>
+              <td>
+                <input type="number" step="0.01" min="0" max="1" class="form-control form-control-sm"
+                       name="pattern_score" value="{{ '%.2f' % p.score }}">
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer small text-muted">
+      <ul class="mb-0">
+        <li>score 는 Presidio 기본 매칭 점수 (0.0 ~ 1.0). KrRrn 같이 <code>validate_result</code> 가 있는 인식기는 체크섬 통과 시 1.0 으로 자동 승격됩니다.</li>
+        <li>정규식이 잘못 작성되면 저장이 거부됩니다.</li>
+        <li>한 인식기 내에서 빈 행 3개가 항상 추가로 보이며, 새 패턴을 입력하려면 빈 행에 채우기만 하면 됩니다.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><strong>context words</strong>
+      <span class="text-muted small ms-2">한 줄에 한 단어. 분석 텍스트 주변에 등장하면 해당 패턴 매칭의 score 가 부스트됩니다.</span>
+    </div>
+    <div class="card-body">
+      <textarea name="context" class="form-control font-monospace" rows="6"
+        placeholder="주민&#10;주민번호&#10;RRN">{% for w in r.context_words %}{{ w }}
+{% endfor %}</textarea>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">저장</button>
+    <a href="/admin/patterns" class="btn btn-secondary">취소</a>
+    {% if r.has_override %}
+    <button type="button" class="btn btn-outline-warning ms-auto"
+            onclick="if(confirm('{{ r.class }} 의 사용자 편집을 모두 지우고 코드 기본값으로 되돌리시겠습니까?')) document.getElementById('reset-form').submit();">
+      코드 기본값으로 초기화
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+{% if r.has_override %}
+<form id="reset-form" method="post" action="/admin/patterns/reset" class="d-none">
+  <input type="hidden" name="class_name" value="{{ r.class }}">
+</form>
+{% endif %}
+
+{% endblock %}

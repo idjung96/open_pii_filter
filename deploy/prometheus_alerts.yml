@@ -1,0 +1,156 @@
+# Phase 8 — Prometheus alert rules for the PII Detection API (T8.4).
+#
+# Place this under /etc/prometheus/rules/pii-api.yml and reference it
+# from prometheus.yml's `rule_files:` list. Then wire Alertmanager to
+# the same Prometheus instance and routes will fire to PagerDuty / Slack
+# / e-mail per your existing Alertmanager configuration.
+#
+# All thresholds are tuned for the spec SLA:
+#   - 본문 검사 p50 < 200 ms, p95 < 1 s
+#   - 첨부 검사 p95 < 30 s
+#   - 99% success rate at the body endpoint
+
+groups:
+  - name: pii-api.errors
+    interval: 30s
+    rules:
+      - alert: ApiErrorRateHigh
+        expr: |
+          (
+            sum(rate(http_requests_total{response_code=~"SVR-.*|REQ-50.*"}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: pii-api
+        annotations:
+          summary: "PII API error rate above 1% (5m window)"
+          description: |
+            More than 1% of requests in the last 5 minutes returned a
+            server error (SVR-*) or rate-limit rejection. Investigate
+            via /v1/admin/audit-events?since=… and the application logs.
+
+      - alert: ApiDown
+        expr: up{job="pii-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: pii-api
+        annotations:
+          summary: "PII API target is down"
+          description: |
+            Prometheus failed to scrape /v1/admin/metrics for the last
+            minute. Check container health, Postgres + Redis reachability,
+            and the admin_ip_allowlist setting (Phase 8 metrics endpoint
+            is gated by the same allowlist as /v1/admin/audit-events).
+
+      - alert: ReadinessFailing
+        expr: |
+          probe_success{job="pii-api-readyz"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: pii-api
+        annotations:
+          summary: "PII API readiness probe is failing"
+          description: |
+            /readyz returned non-200 for at least 2 minutes — likely DB
+            or Redis is unreachable. Traffic should already be drained
+            by the load balancer; investigate the failing component.
+
+  - name: pii-api.latency
+    interval: 30s
+    rules:
+      - alert: BodyDetectLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, path) (
+              rate(http_request_duration_seconds_bucket{path="/v1/detect/post"}[5m])
+            )
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          service: pii-api
+        annotations:
+          summary: "Body detect p95 latency above 1s (Phase 8 SLA)"
+          description: |
+            POST /v1/detect/post p95 exceeded the 1s SLA over the last
+            5 minutes. Look for analyzer cache thrash (pattern reload
+            churn), DB pool exhaustion, or downstream slowness.
+
+      - alert: AnyEndpointLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, path) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          service: pii-api
+        annotations:
+          summary: "An API endpoint p95 latency above 2s"
+          description: |
+            One endpoint's p95 latency over the last 5 minutes exceeded
+            2 s. Check the {{ $labels.path }} label.
+
+  - name: pii-api.workers
+    interval: 60s
+    rules:
+      - alert: ExtractionJobBacklog
+        expr: |
+          (
+            sum(increase(extraction_jobs_total{status="PROCESSING"}[10m]))
+            -
+            sum(increase(extraction_jobs_total{status=~"COMPLETED|FAILED"}[10m]))
+          ) > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: pii-api
+        annotations:
+          summary: "Extraction job backlog growing (>100 over 10m)"
+          description: |
+            More extraction jobs entered PROCESSING than reached a
+            terminal state in the last 10 minutes. The async worker
+            pipeline may be saturated — check OCR endpoint health,
+            ClamAV reachability, and large-attachment processing time.
+
+      - alert: ExtractionJobFailureRateHigh
+        expr: |
+          (
+            sum(rate(extraction_jobs_total{status="FAILED"}[10m]))
+            /
+            sum(rate(extraction_jobs_total{status=~"COMPLETED|FAILED"}[10m]))
+          ) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+          service: pii-api
+        annotations:
+          summary: "Extraction job failure rate above 10% (10m window)"
+          description: |
+            More than 10% of completed extraction jobs failed. Inspect
+            recent job rows in /v1/admin/audit-events and the application
+            log for ExtractionError tracebacks.
+
+  - name: pii-api.security
+    interval: 30s
+    rules:
+      - alert: RateLimitRejectionsSpike
+        expr: |
+          sum(rate(rate_limit_rejections_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: info
+          service: pii-api
+        annotations:
+          summary: "Rate-limit rejection spike (Phase 8)"
+          description: |
+            Average >1 rate-limit rejection/second over the last 5
+            minutes. Likely a misbehaving caller or scripted scanner;
+            cross-reference /v1/admin/audit-events for the offending IP.

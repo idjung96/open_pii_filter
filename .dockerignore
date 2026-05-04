@@ -1,0 +1,64 @@
+# Phase 8 (T8.6) — keep the build context lean. Anything matched here is
+# never copied into the Docker layers.
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# VCS / repo metadata
+.git/
+.gitignore
+.github/
+
+# OMC / Claude tooling
+.claude/
+.omc/
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Virtual envs (uv recreates inside the builder stage)
+.venv/
+venv/
+env/
+
+# Local runtime data
+data/
+*.log
+*.pid
+
+# Tests + load + fixtures (image runs only the API)
+tests/
+samples/
+
+# Docs (selectively copied; keep .md out of build context)
+*.md
+docs/phase_*_completion.md
+docs/load_test_report.md
+docs/security_scan_report.md
+
+# Local secrets — must never enter the image
+.env
+.env.*
+!.env.example
+
+# Misc
+*.bak
+*.tmp

@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% block title %}PII 탐지 이력{% endblock %}
+{% block content %}
+<h2>PII 탐지 이력</h2>
+<p class="text-muted">
+  <code>POST /v1/detect/post</code> 호출만 모은 audit 뷰입니다.
+  대시보드 GUI · 헬스체크 · 인증 실패 등 다른 호출은 제외됩니다.
+  최근 {{ page_size }}건. <small>(시각: KST, GMT+9)</small>
+</p>
+
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'all' %}active{% endif %}" href="/admin/pii-audit?tab=all">
+      전체 <span class="badge bg-secondary ms-1">{{ counts.all }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'pass' %}active{% endif %}" href="/admin/pii-audit?tab=pass">
+      PASS <span class="badge bg-success ms-1">{{ counts.pass }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'block' %}active{% endif %}" href="/admin/pii-audit?tab=block">
+      BLOCK <span class="badge bg-danger ms-1">{{ counts.block }}</span>
+    </a>
+  </li>
+</ul>
+
+<div class="table-responsive">
+  <table class="table table-sm table-striped table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>시각 (KST)</th>
+        <th>IP</th>
+        <th>API Key</th>
+        <th>HTTP</th>
+        <th>판정</th>
+        <th>코드</th>
+        <th>탐지수</th>
+        <th>탐지유형</th>
+        <th>처리(ms)</th>
+        <th>request_id</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><small>{{ r.occurred_at|kst }}</small></td>
+        <td><code>{{ r.source_ip }}</code></td>
+        <td><small>{{ r.api_key_id or '-' }}</small></td>
+        <td>
+          {% if r.http_status is none %}
+            <span class="text-muted">-</span>
+          {% elif r.http_status < 400 %}
+            <span class="badge bg-success">{{ r.http_status }}</span>
+          {% elif r.http_status < 500 %}
+            <span class="badge bg-warning text-dark">{{ r.http_status }}</span>
+          {% else %}
+            <span class="badge bg-danger">{{ r.http_status }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set rc = r.response_code or '' %}
+          {% if rc.startswith('BLOCK-') %}<span class="badge bg-danger">BLOCK</span>
+          {% elif rc.startswith('OK-') %}<span class="badge bg-success">PASS</span>
+          {% elif rc.startswith('REQ-') or rc.startswith('SVR-') %}<span class="badge bg-warning text-dark">ERROR</span>
+          {% else %}<span class="text-muted">-</span>{% endif %}
+        </td>
+        <td><small><code>{{ r.response_code or '-' }}</code></small></td>
+        <td class="text-end">{{ r.detected_entity_count or 0 }}</td>
+        <td><small>{{ r.detected_entity_types or '' }}</small></td>
+        <td class="text-end"><small>{{ r.processing_ms or 0 }}</small></td>
+        <td><small class="font-monospace"><a href="/admin/audit/{{ r.id }}">{{ (r.request_id or '')[:8] }}</a></small></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="text-center text-muted py-4">조건에 맞는 PII 탐지 이력이 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

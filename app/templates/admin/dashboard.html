@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block title %}PII Admin · 홈{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">시스템 상태</h1>
+  <span class="badge bg-secondary">env: {{ env }}</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h6 text-muted">예외 IP</h2>
+        <div class="display-6">{{ exception_ip_count }}</div>
+        <a class="small" href="/admin/exception-ips">관리 →</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h2 class="h6 text-muted">API IP 칼러</h2>
+        <div class="display-6">{{ api_caller_count }}</div>
+        <a class="small" href="/admin/api-callers">관리 →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h2 class="h5 mb-3">Prometheus 카운터 (요약)</h2>
+    {% if metrics_summary %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+          <thead><tr><th>지표</th><th class="text-end">값</th></tr></thead>
+          <tbody>
+            {% for name, value in metrics_summary %}
+              <tr><td><code>{{ name }}</code></td><td class="text-end">{{ value }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-muted mb-0">메트릭을 가져올 수 없습니다.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

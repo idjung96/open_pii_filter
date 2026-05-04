@@ -1,0 +1,224 @@
+{% extends "admin/base.html" %}
+{% block title %}PII 검사 테스트{% endblock %}
+{% block content %}
+<h2>PII 검사 테스트</h2>
+<p class="text-muted">게시글 본문/제목을 입력하면 일반 API <code>POST /v1/detect/post</code> 를 호출하여 결과를 표시합니다. HMAC 인증, audit 미들웨어, 응답 정책 등 운영 호출과 동일한 흐름을 거치므로 API 사용 이력 / PII 탐지 이력에도 그대로 기록됩니다.</p>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header bg-primary text-white"><strong>입력</strong></div>
+      <div class="card-body">
+        <form method="post" action="/admin/test">
+          <div class="mb-3">
+            <label class="form-label">제목</label>
+            <input class="form-control" name="title" value="{{ form.title or '' }}" placeholder="게시글 제목">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">본문</label>
+            <textarea class="form-control" name="body" rows="8" placeholder="예: 문의는 010-0000-1234로 연락주세요. 주민등록번호는 800101-1234560 입니다 (체크섬 유효).">{{ form.body or '' }}</textarea>
+          </div>
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label">
+                엄격도 (strictness)
+                <a class="text-decoration-none small" data-bs-toggle="collapse" href="#strictnessHelp" role="button">[?]</a>
+              </label>
+              <select class="form-select" name="strictness">
+                {% set s = form.strictness or 'medium' %}
+                <option value="low"   {% if s=='low'    %}selected{% endif %}>low (느슨)</option>
+                <option value="medium" {% if s=='medium' %}selected{% endif %}>medium (기본)</option>
+                <option value="high"  {% if s=='high'   %}selected{% endif %}>high (엄격)</option>
+              </select>
+            </div>
+            <div class="col-6 mb-3">
+              <label class="form-label">작성자 IP <span class="text-muted small">(예외 IP 테스트용)</span></label>
+              <input class="form-control" name="author_ip" value="{{ form.author_ip or '203.0.113.5' }}">
+            </div>
+          </div>
+          <div class="alert alert-light border small mb-3">
+            첨부파일 검사는 운영 API 의 비동기 흐름이라 검사 테스트에서는 다루지 않습니다.
+            첨부 검사를 직접 시뮬레이션하려면 운영 클라이언트로
+            <code>attachments[].fetch_url</code> 을 채워 호출하세요.
+          </div>
+          <button class="btn btn-primary" type="submit">검사하기</button>
+          <a class="btn btn-outline-secondary" href="/admin/test">초기화</a>
+        </form>
+
+        <div class="collapse mt-3" id="strictnessHelp">
+          <div class="card card-body bg-light small">
+            <strong>strictness 동작 방식</strong>
+            <p class="mb-2">
+              PII 분석 엔진은 각 탐지 결과마다 0.0~1.0 사이의 <strong>신뢰도 점수(score)</strong>를 산출합니다.
+              <code>strictness</code>는 그 점수를 <strong>PASS / BLOCK</strong> 중 어느 등급으로 분류할지 결정하는 임계값입니다.
+              점수가 동일해도 strictness 설정에 따라 판정이 달라집니다.
+              <span class="badge bg-secondary">Phase 9D 이후</span> WARN 등급은 폐기되어 2단계로 단순화됐습니다.
+            </p>
+
+            <table class="table table-sm table-bordered mb-2">
+              <thead class="table-secondary">
+                <tr>
+                  <th>strictness</th>
+                  <th>BLOCK 임계 (score ≥)</th>
+                  <th>특징</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="badge bg-info">low</span></td>
+                  <td><code>0.65</code></td>
+                  <td>오탐 ↓ / 미탐 ↑ — 게시 자유도 우선</td>
+                </tr>
+                <tr>
+                  <td><span class="badge bg-primary">medium</span></td>
+                  <td><code>0.78</code></td>
+                  <td>기본값 — 일반 게시판에 권장</td>
+                </tr>
+                <tr>
+                  <td><span class="badge bg-danger">high</span></td>
+                  <td><code>0.88</code></td>
+                  <td>오탐 ↑ / 미탐 ↓ — 민원/법무 게시판 등 보호 우선</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <strong>판정 규칙</strong>
+            <ul class="mb-2">
+              <li><code>score ≥ BLOCK 임계</code> → <span class="badge bg-danger">BLOCK</span> 게시 차단</li>
+              <li><code>score &lt; BLOCK 임계</code> → <span class="badge bg-success">PASS</span> 통과</li>
+            </ul>
+
+            <strong>예시</strong> — 동일한 탐지 (score = 0.72)가 strictness별로 다르게 분류됩니다:
+            <ul class="mb-2">
+              <li><span class="badge bg-info">low</span> (0.72 ≥ 0.65) → <span class="badge bg-danger">BLOCK</span></li>
+              <li><span class="badge bg-primary">medium</span> (0.72 &lt; 0.78) → <span class="badge bg-success">PASS</span></li>
+              <li><span class="badge bg-danger">high</span> (0.72 &lt; 0.88) → <span class="badge bg-success">PASS</span></li>
+            </ul>
+
+            <strong>API 호출 시 지정 방법</strong>
+            <pre class="small mb-1">{
+  "request_id": "...",
+  "post": { ... },
+  "options": { "strictness": "medium" }
+}</pre>
+            <p class="text-muted small mb-0">
+              미지정 시 기본값은 <code>medium</code>. 운영 환경에서는 게시판 성격에 맞게 클라이언트가 선택해 호출합니다.
+              <code>pii_policies</code> 테이블에 (entity_type, score band) → action 행이 등록되어 있으면 strictness 기본 분류 위에
+              패턴별 override 가 적용됩니다 (예: 특정 entity_type 을 LOG_ONLY 로 강등하여 PASS 화).
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    {% if result %}
+      <div class="card mb-3">
+        <div class="card-header bg-dark text-white d-flex align-items-center flex-wrap gap-1">
+          <strong>API 응답</strong>
+          {% if result.http_status %}
+            {% set hs = result.http_status %}
+            {% if hs >= 500 %}<span class="badge bg-danger">HTTP {{ hs }}</span>
+            {% elif hs >= 400 %}<span class="badge bg-warning text-dark">HTTP {{ hs }}</span>
+            {% else %}<span class="badge bg-success">HTTP {{ hs }}</span>{% endif %}
+          {% endif %}
+          {% if result.verdict %}
+            {% set v = result.verdict %}
+            {% if v == 'BLOCK' %}<span class="badge bg-danger">{{ v }}</span>
+            {% elif v == 'ERROR' %}<span class="badge bg-warning text-dark">{{ v }}</span>
+            {% else %}<span class="badge bg-success">{{ v }}</span>{% endif %}
+          {% endif %}
+          {% if result.code %}<span class="badge bg-secondary"><code class="text-white">{{ result.code }}</code></span>{% endif %}
+          <span class="badge bg-light text-dark ms-auto">{{ result.elapsed_ms }} ms (왕복)</span>
+          <span class="badge bg-info">strictness={{ result.strictness }}</span>
+        </div>
+        <div class="card-body">
+          {% if result.error %}
+            <div class="alert alert-danger">{{ result.error }}</div>
+          {% endif %}
+
+          {% if result.user_message %}
+          <div class="mb-2">
+            <strong>user_message</strong>
+            <div class="border rounded p-2 bg-light small">{{ result.user_message }}</div>
+          </div>
+          {% endif %}
+
+          {% if result.developer_message %}
+          <div class="mb-2">
+            <strong>developer_message</strong>
+            <div class="border rounded p-2 bg-light small font-monospace">{{ result.developer_message }}</div>
+          </div>
+          {% endif %}
+
+          <table class="table table-sm small mb-2">
+            <tbody>
+              <tr><th style="width:30%">request_id</th><td><code>{{ result.request_id or '-' }}</code></td></tr>
+              <tr><th>processing_ms</th><td>{{ result.processing_ms if result.processing_ms is not none else '-' }} (서버 처리)</td></tr>
+              <tr><th>processed_at</th><td><small>{{ result.processed_at or '-' }}</small></td></tr>
+              <tr><th>system_message</th><td><small class="text-muted">{{ result.system_message or '-' }}</small></td></tr>
+            </tbody>
+          </table>
+
+          {% if result.detections %}
+          <h5 class="mt-3">탐지 ({{ result.detections|length }})</h5>
+          <table class="table table-sm table-bordered">
+            <thead class="table-light">
+              <tr>
+                <th>필드</th>
+                <th>유형</th>
+                <th>코드</th>
+                <th>판정</th>
+                <th>위치</th>
+                <th>점수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in result.detections %}
+              <tr>
+                <td><small>{{ d.field }}</small></td>
+                <td><code>{{ d.entity_type }}</code></td>
+                <td><code class="small">{{ d.code }}</code></td>
+                <td><small>{{ d.verdict }}</small></td>
+                <td><small>{{ d.start if d.start is not none else '-' }}–{{ d.end if d.end is not none else '-' }}</small></td>
+                <td><small>{% if d.score is not none %}{{ '%.2f' % d.score }}{% else %}-{% endif %}</small></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% endif %}
+
+          <details class="mt-3">
+            <summary class="small text-muted">전체 응답 envelope 보기 (JSON)</summary>
+            <pre class="small bg-light border rounded p-2 mt-1" style="max-height: 300px; overflow:auto;">{{ result.envelope | tojson(indent=2) }}</pre>
+          </details>
+          <p class="small text-muted mt-2 mb-0">
+            이 호출은 <code>POST /v1/detect/post</code> 를 같은 프로세스에서 그대로 실행합니다.
+            결과는 <a href="/admin/audit">API 사용 이력</a> /
+            <a href="/admin/pii-audit">PII 탐지 이력</a> 에도 동일하게 기록됩니다.
+          </p>
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <div class="card-body text-muted">
+          좌측에서 본문/첨부를 입력하고 <strong>검사하기</strong>를 누르면 이 영역에 결과가 표시됩니다.
+          <hr>
+          <strong>샘플 입력 (복사해서 사용):</strong>
+          <pre class="small mb-0">제목: 문의드립니다
+본문: 안녕하세요. 010-1234-5678로 연락 부탁드립니다.
+주민등록번호 800101-1234567 입니다.
+이메일 test@example.com</pre>
+          <div class="mt-2">
+            <span class="badge bg-warning text-dark">참고</span>
+            <code>800101-1234567</code> 은 형식만 RRN 같고 <strong>체크섬이 맞지 않아 KR_RRN 으로 인식되지 않습니다</strong>.
+            오탐 방지를 위해 ISO/KS X 1001 체크섬과 생년월일 검증을 통과한 번호만 탐지됩니다.
+            유효한 합성 RRN 예: <code>800101-1234560</code> (마지막 자리 0).
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

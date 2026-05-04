@@ -1,0 +1,88 @@
+{% extends "admin/base.html" %}
+{% block title %}시스템 설정{% endblock %}
+{% block content %}
+<h2>시스템 설정</h2>
+<p class="text-muted">런타임 토글 설정 — <code>data/system_settings.json</code> 에 저장됩니다.</p>
+
+<div class="row g-3">
+  <div class="col-md-8 col-lg-6">
+    <div class="card">
+      <div class="card-header fw-semibold">API 사용 이력 상세 저장</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          켜짐: 요청/응답 본문을 <code>audit_events</code>에 저장.
+          운영 환경에서는 개인정보 보호를 위해 <strong>OFF</strong> 권장.
+          테스트 환경에서만 ON.
+        </p>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <span>현재 상태:</span>
+          {% if settings.get('audit_detail_enabled') %}
+            <span class="badge bg-success fs-6">ON</span>
+          {% else %}
+            <span class="badge bg-secondary fs-6">OFF</span>
+          {% endif %}
+        </div>
+        <form method="post" action="/admin/settings/audit-detail">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="auditDetailSwitch" name="enabled" value="on"
+                   {% if settings.get('audit_detail_enabled') %}checked{% endif %}>
+            <label class="form-check-label" for="auditDetailSwitch">
+              상세 저장 활성화
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">저장</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8 col-lg-6">
+    <div class="card">
+      <div class="card-header fw-semibold">관리자 비밀번호 변경</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          새 비밀번호는 <code>data/system_settings.json</code> 의
+          <code>admin_dashboard_password_override</code> 에 저장되며, 환경변수
+          <code>ADMIN_DASHBOARD_PASSWORD</code> 보다 우선합니다.
+          override를 비우면 환경변수 값으로 자동 복원됩니다.
+        </p>
+
+        {% if password_error %}
+          <div class="alert alert-danger py-2 small">{{ password_error }}</div>
+        {% endif %}
+        {% if password_success %}
+          <div class="alert alert-success py-2 small">비밀번호가 변경됐습니다. 다음 로그인부터 새 비밀번호를 사용하세요.</div>
+        {% endif %}
+
+        <form method="post" action="/admin/settings/password" autocomplete="off">
+          <div class="mb-2">
+            <label class="form-label small mb-1" for="cur_pw">현재 비밀번호</label>
+            <input class="form-control form-control-sm" type="password"
+                   id="cur_pw" name="current_password" required autocomplete="current-password">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1" for="new_pw">새 비밀번호 <span class="text-muted">(4자 이상)</span></label>
+            <input class="form-control form-control-sm" type="password"
+                   id="new_pw" name="new_password" minlength="4" required autocomplete="new-password">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small mb-1" for="cfm_pw">새 비밀번호 확인</label>
+            <input class="form-control form-control-sm" type="password"
+                   id="cfm_pw" name="confirm_password" minlength="4" required autocomplete="new-password">
+          </div>
+          <button type="submit" class="btn btn-warning btn-sm">비밀번호 변경</button>
+          <div class="form-text small mt-2">
+            override 활성:
+            {% if settings.get('admin_dashboard_password_override') %}
+              <span class="badge bg-success">YES (JSON 파일 값 사용 중)</span>
+            {% else %}
+              <span class="badge bg-secondary">NO (환경변수 값 사용 중)</span>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

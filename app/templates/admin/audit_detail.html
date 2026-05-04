@@ -1,0 +1,163 @@
+{% extends "admin/base.html" %}
+{% block title %}Audit 상세 보기{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <a href="/admin/audit" class="btn btn-sm btn-outline-secondary">&larr; 목록으로</a>
+  <h2 class="mb-0">Audit 상세 보기</h2>
+</div>
+
+{% if not_found %}
+<div class="alert alert-warning">해당 이력(id={{ request.path_params.get('event_id', '') }})을 찾을 수 없습니다.</div>
+{% else %}
+
+<div class="row g-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-semibold">기본 정보</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><th style="width:200px">ID</th><td>{{ row.id }}</td></tr>
+            <tr><th>시각 (KST)</th><td>{{ row.occurred_at|kst }}</td></tr>
+            <tr><th>request_id</th><td><code class="font-monospace">{{ row.request_id or '-' }}</code></td></tr>
+            <tr><th>IP</th><td><code>{{ row.source_ip }}</code></td></tr>
+            <tr><th>API Key ID</th><td><small>{{ row.api_key_id or '-' }}</small></td></tr>
+            <tr><th>Method</th><td><span class="badge bg-secondary">{{ row.method }}</span></td></tr>
+            <tr><th>Path</th><td><code>{{ row.path }}</code></td></tr>
+            <tr>
+              <th>HTTP Status</th>
+              <td>
+                {% if row.http_status is none %}
+                  <span class="text-muted">-</span>
+                {% elif row.http_status < 400 %}
+                  <span class="badge bg-success">{{ row.http_status }}</span>
+                {% elif row.http_status < 500 %}
+                  <span class="badge bg-warning text-dark">{{ row.http_status }}</span>
+                {% else %}
+                  <span class="badge bg-danger">{{ row.http_status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th>Response Code</th>
+              <td>
+                {% if row.response_code %}
+                  {% if row.response_code.startswith('BLOCK-') %}
+                    <span class="badge bg-danger"><code class="text-white">{{ row.response_code }}</code></span>
+                  {% elif row.response_code.startswith('REQ-') %}
+                    <span class="badge bg-warning"><code class="text-white">{{ row.response_code }}</code></span>
+                  {% elif row.response_code.startswith('SVR-') %}
+                    <span class="badge bg-dark"><code class="text-white">{{ row.response_code }}</code></span>
+                  {% else %}
+                    <span class="badge bg-info"><code class="text-white">{{ row.response_code }}</code></span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr><th>탐지수</th><td>{{ row.detected_entity_count or 0 }}</td></tr>
+            <tr><th>탐지 유형</th><td><small>{{ row.detected_entity_types or '-' }}</small></td></tr>
+            <tr><th>처리 시간 (ms)</th><td>{{ row.processing_ms if row.processing_ms is not none else '-' }}</td></tr>
+            <tr><th>Body Hash (SHA-256)</th><td><small class="font-monospace text-muted">{{ row.body_hash or '-' }}</small></td></tr>
+            <tr><th>Shadow Hit Types</th><td><small>{{ row.shadow_hit_types or '-' }}</small></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-semibold">요청 헤더</div>
+      <div class="card-body p-0">
+        {% if row.request_headers_text %}
+          <pre class="m-0 p-3 bg-light" style="max-height:300px;overflow:auto;font-size:0.8rem">{{ row.request_headers_text }}</pre>
+        {% else %}
+          <p class="text-muted m-3">(미저장 — 상세 저장 OFF 또는 응답 캡처 불가)</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if detections %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-semibold">PII 탐지 결과 ({{ detections|length }})</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>필드</th>
+              <th>유형</th>
+              <th>코드</th>
+              <th>점수</th>
+              <th>위치</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in detections %}
+            <tr>
+              <td><small>{{ d.field or '-' }}</small></td>
+              <td><code>{{ d.entity_type or '-' }}</code></td>
+              <td>
+                {% set rc = d.code or '' %}
+                {% if rc.startswith('BLOCK-') %}<span class="badge bg-danger"><code class="text-white">{{ rc }}</code></span>
+                {% elif rc.startswith('OK-') %}<span class="badge bg-success"><code class="text-white">{{ rc }}</code></span>
+                {% else %}<code class="small">{{ rc or '-' }}</code>{% endif %}
+              </td>
+              <td>
+                {% if d.score is not none %}
+                  {% set sc = d.score %}
+                  {% if sc >= 0.88 %}<span class="badge bg-danger">{{ '%.2f' % sc }}</span>
+                  {% elif sc >= 0.78 %}<span class="badge bg-warning text-dark">{{ '%.2f' % sc }}</span>
+                  {% elif sc >= 0.65 %}<span class="badge bg-info text-dark">{{ '%.2f' % sc }}</span>
+                  {% else %}<span class="badge bg-secondary">{{ '%.2f' % sc }}</span>{% endif %}
+                {% else %}<span class="text-muted">-</span>{% endif %}
+              </td>
+              <td><small>{{ d.start if d.start is not none else '-' }}–{{ d.end if d.end is not none else '-' }}</small></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer small text-muted">
+        점수 색상: <span class="badge bg-danger">≥0.88 (high)</span>
+        <span class="badge bg-warning text-dark">≥0.78 (medium)</span>
+        <span class="badge bg-info text-dark">≥0.65 (low)</span>
+        <span class="badge bg-secondary">&lt;0.65</span>
+        — strictness 임계값 기준. 체크섬 검증 통과 인식기는 score 가 1.0 으로 자동 승격됩니다.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">요청 본문</div>
+      <div class="card-body p-0">
+        {% if row.request_body_text %}
+          <pre class="m-0 p-3 bg-light" style="max-height:400px;overflow:auto;font-size:0.8rem">{{ row.request_body_text | prettyjson }}</pre>
+        {% else %}
+          <p class="text-muted m-3">(미저장 — 상세 저장 OFF 또는 응답 캡처 불가)</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">응답 본문</div>
+      <div class="card-body p-0">
+        {% if row.response_body_text %}
+          <pre class="m-0 p-3 bg-light" style="max-height:400px;overflow:auto;font-size:0.8rem">{{ row.response_body_text | prettyjson }}</pre>
+        {% else %}
+          <p class="text-muted m-3">(미저장 — 상세 저장 OFF 또는 응답 캡처 불가)</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

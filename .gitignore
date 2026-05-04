@@ -1,0 +1,53 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# API 키 레지스트리 — 비밀 키 포함, 절대 커밋 금지
+keys/
+
+# 내부 문서 (공개 저장소에 포함하지 않음)
+PII_API_Development_Requirements.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# uv / poetry
+.uv/
+uv.lock  # include? 팀 정책에 따라 결정 — 보통 커밋 권장. 커밋하려면 이 줄 제거.
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Project runtime
+/logs/
+/tmp/
+/data/
+/.omc/
+.claude/
+.omc/
+data/masked/

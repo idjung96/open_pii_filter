@@ -1,0 +1,72 @@
+{% extends "admin/base.html" %}
+{% block title %}API IP 칼러{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">API IP 칼러</h1>
+<p class="text-muted">아래 CIDR에서 들어오는 요청은 HMAC 헤더가 없어도 인증을 통과합니다.</p>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">새 API IP 칼러 추가</h2>
+    <form method="post" action="/admin/api-callers" class="row g-2">
+      <div class="col-md-3">
+        <label class="form-label" for="cidr">CIDR</label>
+        <input class="form-control" id="cidr" name="cidr" placeholder="192.168.1.0/24" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="name">이름</label>
+        <input class="form-control" id="name" name="name" placeholder="internal-bot" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="rate_per_minute">분당 요청</label>
+        <input class="form-control" id="rate_per_minute" name="rate_per_minute" type="number" min="1" value="60">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="rate_per_hour">시간당 요청</label>
+        <input class="form-control" id="rate_per_hour" name="rate_per_hour" type="number" min="1" value="1000">
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100" type="submit">추가</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h2 class="h5 mb-3">등록된 API IP 칼러 ({{ rows|length }})</h2>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead><tr>
+          <th>ID</th><th>CIDR</th><th>이름</th><th class="text-end">분당</th><th class="text-end">시간당</th><th>활성</th><th>등록 시각</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td><code>{{ r.cidr }}</code></td>
+              <td>{{ r.name }}</td>
+              <td class="text-end">{{ r.rate_per_minute }}</td>
+              <td class="text-end">{{ r.rate_per_hour }}</td>
+              <td>
+                {% if r.enabled %}
+                  <span class="badge bg-success">enabled</span>
+                {% else %}
+                  <span class="badge bg-secondary">disabled</span>
+                {% endif %}
+              </td>
+              <td><small>{{ r.created_at }}</small></td>
+              <td class="text-end">
+                <form method="post" action="/admin/api-callers/{{ r.id }}/delete" onsubmit="return confirm('삭제하시겠습니까?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">삭제</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="text-center text-muted">등록된 행이 없습니다.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

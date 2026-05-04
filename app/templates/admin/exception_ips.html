@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% block title %}예외 IP{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">예외 IP</h1>
+<p class="text-muted">아래 CIDR에 속하는 작성자(<code>post.author.ip</code>)의 게시글은 PII 분석을 건너뛰고 즉시 통과합니다.</p>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">새 예외 IP 추가</h2>
+    <form method="post" action="/admin/exception-ips" class="row g-2">
+      <div class="col-md-4">
+        <label class="form-label" for="cidr">CIDR</label>
+        <input class="form-control" id="cidr" name="cidr" placeholder="10.0.0.0/24" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="label">설명</label>
+        <input class="form-control" id="label" name="label" placeholder="HR team">
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100" type="submit">추가</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h2 class="h5 mb-3">등록된 예외 IP ({{ rows|length }})</h2>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead><tr>
+          <th>ID</th><th>CIDR</th><th>설명</th><th>활성</th><th>등록 시각</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td><code>{{ r.cidr }}</code></td>
+              <td>{{ r.label }}</td>
+              <td>
+                {% if r.enabled %}
+                  <span class="badge bg-success">enabled</span>
+                {% else %}
+                  <span class="badge bg-secondary">disabled</span>
+                {% endif %}
+              </td>
+              <td><small>{{ r.created_at }}</small></td>
+              <td class="text-end">
+                <form method="post" action="/admin/exception-ips/{{ r.id }}/delete" onsubmit="return confirm('삭제하시겠습니까?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">삭제</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-center text-muted">등록된 행이 없습니다.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

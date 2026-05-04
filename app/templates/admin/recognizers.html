@@ -1,0 +1,74 @@
+{% extends "admin/base.html" %}
+{% block title %}인식기{% endblock %}
+{% block content %}
+<h2>인식기</h2>
+<p class="text-muted">
+  분석 엔진에 등록된 모든 PII 인식기 (read-only).
+  Phase 9E — 사용자 등록 패턴(<code>pii_patterns</code>) 인프라 폐기 후
+  코드 인식기 + Presidio 내장 + deny_list 만 사용합니다.
+</p>
+
+{% set source_labels = {
+    'custom_kr': ('커스텀 한국어 인식기', 'success', 'app/core/recognizers/* 의 코드. 체크섬 검증 포함.'),
+    'presidio_builtin': ('Presidio 내장 인식기', 'primary', 'presidio-analyzer 패키지 제공. 언어 무관 정규식 매칭.'),
+    'db_deny_list': ('DB 거부 목록', 'warning', 'pii_deny_list 테이블의 정확 일치 항목.'),
+} %}
+
+{% for src, items in grouped.items() %}
+  {% if items %}
+  {% set label = source_labels.get(src, (src, 'secondary', '')) %}
+  <div class="card mb-3">
+    <div class="card-header bg-{{ label[1] }} text-white">
+      <strong>{{ label[0] }}</strong>
+      <span class="badge bg-light text-dark ms-2">{{ items|length }}</span>
+      <span class="ms-2 small">{{ label[2] }}</span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 22%">이름</th>
+            <th style="width: 18%">entity_type</th>
+            <th>패턴 / regex</th>
+            <th style="width: 18%">context words</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in items %}
+          <tr>
+            <td>
+              <strong>{{ r.class }}</strong>
+              {% if r.name and r.name != r.class %}<br><small class="text-muted">{{ r.name }}</small>{% endif %}
+            </td>
+            <td>
+              {% for et in r.supported_entities %}
+                <span class="badge bg-dark me-1"><code class="text-white">{{ et }}</code></span>
+              {% endfor %}
+            </td>
+            <td>
+              {% if r.patterns %}
+                {% for p in r.patterns %}
+                  <div class="small mb-1">
+                    <code class="text-primary">{{ p.name }}</code>
+                    <span class="badge bg-secondary">score={{ '%.2f' % p.score }}</span>
+                    <pre class="small mb-0 mt-1">{{ p.regex[:160] }}{% if p.regex|length > 160 %} …{% endif %}</pre>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <small class="text-muted">정규식 패턴 없음 (코드 검증)</small>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.context_words %}
+                {% for w in r.context_words %}<span class="badge bg-light text-dark border me-1">{{ w }}</span>{% endfor %}
+              {% else %}<small class="text-muted">-</small>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "admin/base.html" %}
+{% block title %}API 사용 이력{% endblock %}
+{% block content %}
+<h2>API 사용 이력</h2>
+<p class="text-muted">최근 {{ page_size }}건. 모든 인증 요청이 기록됩니다. <small>(시각: KST, GMT+9)</small></p>
+
+<div class="table-responsive">
+  <table class="table table-sm table-striped table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        <th>시각 (KST)</th>
+        <th>IP</th>
+        <th>API Key</th>
+        <th>Method</th>
+        <th>Path</th>
+        <th>HTTP</th>
+        <th>코드</th>
+        <th>탐지수</th>
+        <th>탐지유형</th>
+        <th>처리(ms)</th>
+        <th>request_id</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><small>{{ r.occurred_at|kst }}</small></td>
+        <td><code>{{ r.source_ip }}</code></td>
+        <td><small>{{ r.api_key_id or '-' }}</small></td>
+        <td><span class="badge bg-secondary">{{ r.method }}</span></td>
+        <td><small>{{ r.path }}</small></td>
+        <td>
+          {% if r.http_status is none %}
+            <span class="text-muted">-</span>
+          {% elif r.http_status < 400 %}
+            <span class="badge bg-success">{{ r.http_status }}</span>
+          {% elif r.http_status < 500 %}
+            <span class="badge bg-warning text-dark">{{ r.http_status }}</span>
+          {% else %}
+            <span class="badge bg-danger">{{ r.http_status }}</span>
+          {% endif %}
+        </td>
+        <td><small><code>{{ r.response_code or '-' }}</code></small></td>
+        <td class="text-end">{{ r.detected_entity_count or 0 }}</td>
+        <td><small>{{ r.detected_entity_types or '' }}</small></td>
+        <td class="text-end"><small>{{ r.processing_ms or 0 }}</small></td>
+        <td><small class="font-monospace"><a href="/admin/audit/{{ r.id }}">{{ (r.request_id or '')[:8] }}</a></small></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11" class="text-center text-muted py-4">기록된 사용 이력이 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

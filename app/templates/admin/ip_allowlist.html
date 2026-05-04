@@ -1,0 +1,179 @@
+{% extends "admin/base.html" %}
+{% block title %}IP 허용 목록{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">IP 허용 목록</h1>
+<p class="text-muted">두 가지 IP 화이트리스트를 한 화면에서 관리합니다.</p>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-exception-tab" data-bs-toggle="tab" data-bs-target="#tab-exception" type="button" role="tab">
+      작성자 예외 IP
+      <span class="badge bg-secondary ms-1">{{ exception_rows|length }}</span>
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-service-tab" data-bs-toggle="tab" data-bs-target="#tab-service" type="button" role="tab">
+      서비스 IP (API 인증 우회)
+      <span class="badge bg-secondary ms-1">{{ caller_rows|length }}</span>
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- ───────── 작성자 예외 IP ───────── -->
+  <div class="tab-pane fade show active" id="tab-exception" role="tabpanel">
+    <div class="alert alert-info py-2 small">
+      등록된 CIDR 범위에 속하는 게시 작성자(<code>post.author.ip</code>)의 글은
+      <strong>PII 분석을 건너뛰고 즉시 통과</strong>합니다.
+      예: HR 부서 PC, 내부 관리자 IP 등 PII 포함 게시가 정당화되는 클라이언트.
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-primary text-white"><strong>+ 새 작성자 예외 IP 추가</strong></div>
+      <div class="card-body">
+        <form method="post" action="/admin/exception-ips" class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label small mb-1" for="ex-cidr">CIDR</label>
+            <input class="form-control form-control-sm" id="ex-cidr" name="cidr" placeholder="10.0.0.0/24" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1" for="ex-label">설명</label>
+            <input class="form-control form-control-sm" id="ex-label" name="label" placeholder="HR team">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-primary btn-sm w-100" type="submit">추가</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>ID</th><th>CIDR</th><th>설명</th><th>활성</th><th>등록 시각</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in exception_rows %}
+              <tr>
+                <td><small>#{{ r.id }}</small></td>
+                <td><code>{{ r.cidr }}</code></td>
+                <td>{{ r.label }}</td>
+                <td>
+                  {% if r.enabled %}
+                    <span class="badge bg-success">enabled</span>
+                  {% else %}
+                    <span class="badge bg-secondary">disabled</span>
+                  {% endif %}
+                </td>
+                <td><small>{{ r.created_at|kst }}</small></td>
+                <td class="text-end">
+                  <form method="post" action="/admin/exception-ips/{{ r.id }}/delete"
+                        onsubmit="return confirm('예외 IP {{ r.cidr }} 을(를) 삭제하시겠습니까?');"
+                        class="m-0 p-0">
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" type="submit">삭제</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6" class="text-center text-muted py-3">등록된 행이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── 서비스 IP ───────── -->
+  <div class="tab-pane fade" id="tab-service" role="tabpanel">
+    <div class="alert alert-info py-2 small">
+      등록된 CIDR 범위에서 들어오는 API 요청은 <strong>HMAC 서명 헤더 없이도 인증을 통과</strong>합니다.
+      예: 내부 자동화 봇, 사내 호출 시스템 등 IP 기반 신뢰가 가능한 클라이언트.
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-primary text-white"><strong>+ 새 서비스 IP 추가</strong></div>
+      <div class="card-body">
+        <form method="post" action="/admin/api-callers" class="row g-2">
+          <div class="col-md-3">
+            <label class="form-label small mb-1" for="sv-cidr">CIDR</label>
+            <input class="form-control form-control-sm" id="sv-cidr" name="cidr" placeholder="192.168.1.0/24" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1" for="sv-name">이름</label>
+            <input class="form-control form-control-sm" id="sv-name" name="name" placeholder="internal-bot" required>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small mb-1" for="sv-rpm">분당 요청</label>
+            <input class="form-control form-control-sm" id="sv-rpm" name="rate_per_minute" type="number" min="1" value="60">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small mb-1" for="sv-rph">시간당 요청</label>
+            <input class="form-control form-control-sm" id="sv-rph" name="rate_per_hour" type="number" min="1" value="1000">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-primary btn-sm w-100" type="submit">추가</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>ID</th><th>CIDR</th><th>이름</th>
+              <th class="text-end">분당</th><th class="text-end">시간당</th>
+              <th>활성</th><th>등록 시각</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in caller_rows %}
+              <tr>
+                <td><small>#{{ r.id }}</small></td>
+                <td><code>{{ r.cidr }}</code></td>
+                <td>{{ r.name }}</td>
+                <td class="text-end">{{ r.rate_per_minute }}</td>
+                <td class="text-end">{{ r.rate_per_hour }}</td>
+                <td>
+                  {% if r.enabled %}
+                    <span class="badge bg-success">enabled</span>
+                  {% else %}
+                    <span class="badge bg-secondary">disabled</span>
+                  {% endif %}
+                </td>
+                <td><small>{{ r.created_at|kst }}</small></td>
+                <td class="text-end">
+                  <form method="post" action="/admin/api-callers/{{ r.id }}/delete"
+                        onsubmit="return confirm('서비스 IP {{ r.name }} ({{ r.cidr }}) 을(를) 삭제하시겠습니까?');"
+                        class="m-0 p-0">
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" type="submit">삭제</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="8" class="text-center text-muted py-3">등록된 행이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // URL hash (#tab-exception / #tab-service) 로 진입 시 해당 탭 활성화
+  (function () {
+    var hash = window.location.hash;
+    if (hash === "#tab-service") {
+      var btn = document.getElementById("tab-service-tab");
+      if (btn) new bootstrap.Tab(btn).show();
+    }
+  })();
+</script>
+{% endblock %}

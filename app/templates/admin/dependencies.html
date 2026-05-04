@@ -1,0 +1,65 @@
+{% extends "admin/base.html" %}
+{% block title %}오픈소스 라이브러리{% endblock %}
+{% block content %}
+<h2>오픈소스 라이브러리 / 외부 시스템</h2>
+<p class="text-muted">총 {{ total }}개 항목. 카테고리별로 분류되어 있습니다. AGPL/GPL/SSPL 라이선스는 외부 노출 코드에서 금지됩니다.</p>
+
+{% for category, items in grouped.items() %}
+<div class="card mb-3">
+  <div class="card-header bg-secondary text-white">
+    <strong>{{ category }}</strong>
+    <span class="badge bg-light text-dark ms-2">{{ items|length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 22%">이름</th>
+          <th style="width: 12%">버전</th>
+          <th style="width: 18%">라이선스</th>
+          <th>용도</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in items %}
+        <tr>
+          <td><strong>{{ d.name }}</strong></td>
+          <td><code class="small">{{ d.version }}</code></td>
+          <td>
+            {% set lic = d.license %}
+            {% if 'MIT' in lic or 'BSD' in lic or 'Apache' in lic or 'PostgreSQL' in lic or 'MIT-CMU' in lic %}
+              <span class="badge bg-success">{{ lic }}</span>
+            {% elif 'LGPL' in lic %}
+              <span class="badge bg-warning text-dark">{{ lic }}</span>
+            {% elif 'GPL' in lic or 'AGPL' in lic or 'SSPL' in lic or 'RSAL' in lic %}
+              <span class="badge bg-danger">{{ lic }}</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ lic }}</span>
+            {% endif %}
+          </td>
+          <td><small>{{ d.purpose }}</small></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+<div class="card mt-3">
+  <div class="card-body small">
+    <strong>라이선스 색상 의미</strong>
+    <ul class="mb-2">
+      <li><span class="badge bg-success">MIT/BSD/Apache</span> — 사용 자유, 외부 노출 가능</li>
+      <li><span class="badge bg-warning text-dark">LGPL</span> — 동적 링크 사용. 컨테이너 격리로 사용 중</li>
+      <li><span class="badge bg-danger">GPL/AGPL/SSPL/RSAL</span> — 외부 시스템(별도 프로세스)으로만 사용. 코드 결합 금지</li>
+    </ul>
+    <strong>금지 라이브러리 (요구사항 명시)</strong>
+    <ul class="mb-0">
+      <li><code>PyMuPDF</code> — AGPL-3.0 → <code>pypdfium2</code> + <code>pdfplumber</code> 사용</li>
+      <li><code>pyhwp</code> / <code>hwp5txt</code> — AGPL-3.0 → <code>pyhwpx</code> 검토 또는 미지원</li>
+      <li><code>alphagyuu Korean-PII-BERT</code> — 라이선스 불명 → 사용 안 함 (정규식 + 체크섬 기반 인식기로 충분)</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
