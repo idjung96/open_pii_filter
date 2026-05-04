@@ -240,6 +240,16 @@ docs/              # 설치·운영·연동·아키텍처 문서
 
 ---
 
+## 개발 방식 (Pair Programming with Claude Code)
+
+본 프로젝트는 [**Claude Code**](https://claude.com/claude-code) (Anthropic 의 공식 CLI) 와의 **페어 프로그래밍**으로 개발되고 있습니다.
+
+- 사람(설계·검토·의사결정) ↔ Claude Code(코드 작성·테스트·문서화) 가 한 쌍으로 작업합니다.
+- 모든 코드 변경은 사람의 리뷰·승인을 거쳐 커밋되며, AI 가 작성한 변경에는 커밋 메시지에 `Co-Authored-By: Claude …` 트레일러를 남겨 추적 가능성을 확보합니다.
+- 요구사항 정의·아키텍처 결정·민감한 보안/개인정보 영역(키 관리, 감사로그 정책 등)은 사람이 최종 결정합니다.
+
+---
+
 ## 라이선스
 
 본 프로젝트는 **GNU General Public License v3.0 or later (GPL-3.0-or-later)** 로 배포됩니다.
