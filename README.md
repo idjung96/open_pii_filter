@@ -37,7 +37,7 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 |------|------|
 | **텍스트 PII 탐지** | 주민등록번호, 운전면허, 여권, 전화번호, 이메일, 계좌번호 등 |
 | **첨부파일 분석** | PDF, DOCX, HWP/HWPX, 이미지 (비동기 처리 + 웹훅) |
-| **이미지 OCR** | vLLM Qwen3.5-VL (기본) / PaddleOCR (에어갭 대안) |
+| **이미지 OCR** | vLLM Qwen3.5-27B-GPTQ-Int4 (기본) / PaddleOCR (에어갭 대안) |
 | **HMAC 인증** | API 키 + HMAC-SHA256 서명 + ±5분 타임스탬프 창 |
 | **감사 로그** | append-only (DB 트리거), 1년 보존 |
 | **AES-256-GCM** | 키 로테이션 지원, 버전 envelope |
@@ -88,8 +88,8 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 |---|------|-------------------|
 | 9 | 멱등성 체크 (`request_id` 24h 캐시 — 중복 → 캐시 응답 반환) | `REQ-4005` (in-progress) |
 | 10 | 요청 스키마 검증 (pydantic) | `REQ-4001~4004` |
-| 11 | 본문 길이 검증 (`title` ≤ 200, `body` ≤ 50,000) | `REQ-4030` |
-| 12 | 첨부 사전 검증 (`callback_url` 필수 / 개수 ≤ 10 / 크기 ≤ 10 MiB / 지원 MIME) | `REQ-4031~4033` |
+| 11 | 본문 길이 검증 (`title` ≤ 500, `body` ≤ 50,000) | `REQ-4030` |
+| 12 | 첨부 사전 검증 (`callback_url` 필수 / 개수 ≤ 5 / 크기 ≤ 50 MiB / 지원 MIME) | `REQ-4031~4033` |
 | 13 | **HWP/HWPX × 예외 IP 검사** — 일반 IP 의 한글 파일 첨부 거절 | `REQ-4034` (403) |
 
 ### 4. 본문 PII 분석
@@ -174,12 +174,12 @@ uv sync                          # 의존성 설치
 ruff check .                     # 린트
 mypy app/                        # 타입 검사 (strict)
 bandit -r app/                   # 보안 스캔
-pytest tests/                    # 전체 테스트 (225개)
+pytest tests/                    # 전체 테스트
 pytest tests/unit/               # 단위 테스트
 pytest tests/integration/        # 통합 테스트
 uvicorn app.main:app --reload    # 개발 서버
 alembic upgrade head             # DB 마이그레이션
-python -m app.cli apikey create --name "test"   # API 키 발급
+python -m app.cli apikey issue --name "test"    # API 키 발급
 ```
 
 ---
@@ -188,17 +188,19 @@ python -m app.cli apikey create --name "test"   # API 키 발급
 
 ```
 app/
-├── api/           # FastAPI 라우터 (detect, jobs, feedback, health, admin/*)
-├── core/          # PII 엔진 (analyzer, recognizers, codes, policies, policy_engine)
-├── extractors/    # 파일 추출 (pdf, docx, hwp, ocr, ocr_vlm, ocr_paddle)
-├── workers/       # 백그라운드 워커 (attachment_processor, cleanup, alerter)
+├── api/           # FastAPI 라우터 (detect, jobs, feedback, health, metrics, dashboard, legal, responses, schemas, admin_audit, admin_stats)
+├── core/          # PII 엔진 (analyzer, recognizers, codes, policies, policy_engine, system_settings, *_cache)
+├── extractors/    # 파일 추출 (pdf, docx, hwpx, ocr, ocr_vlm, ocr_paddle, dispatcher, fetcher, clamav)
+├── workers/       # 백그라운드 워커 (attachment_processor, webhook_sender, job_cleanup, audit_cleanup, feedback_alerter, nonce_vacuum)
 ├── db/            # ORM 모델, CRUD, Alembic 마이그레이션
 ├── security/      # HMAC, rate limit, 암호화, 감사 미들웨어, 메트릭
+├── cli/           # `python -m app.cli` (apikey 관리)
 └── config.py      # pydantic-settings 기반 환경 변수
 tests/
-├── unit/
-├── integration/   # Phase 1~8 통합 테스트
-└── fixtures/      # 합성 PII 데이터 생성기 (실제 PII 사용 금지)
+├── unit/          # 단위 테스트 (analyzer, codes, policies, encryption, …)
+├── integration/   # Phase 1~8 통합 테스트 (HMAC, rate limit, OCR, 감사로그, 메트릭 등)
+├── fixtures/      # 합성 PII 데이터 생성기 (실제 PII 사용 금지)
+└── load/          # Locust 부하 테스트 + ASGI smoke
 deploy/
 ├── Dockerfile     # multi-stage, non-root appuser
 ├── docker-compose.yml
@@ -215,7 +217,7 @@ docs/              # 설치·운영·연동·아키텍처 문서
 - **DB**: PostgreSQL 16 + asyncpg + SQLAlchemy 2.x + Alembic
 - **Cache**: Redis 7 (GCRA rate limiting, nonce dedup, idempotency)
 - **PII 엔진**: Microsoft Presidio (analyzer) + spaCy `ko_core_news_lg` (토크나이저)
-- **OCR**: vLLM Qwen3.5-27B-GPTQ-Int4 (기본) / PaddleOCR (대안)
+- **OCR**: vLLM Qwen3.5-27B-GPTQ-Int4 (기본, OpenAI-호환 chat completions) / PaddleOCR (대안)
 - **이미지**: Pillow (이미지 처리), pypdfium2 (스캔 PDF 렌더링)
 - **보안**: HMAC-SHA256, AES-256-GCM, ClamAV, append-only 감사로그
 - **관측성**: prometheus-client, structlog, PIIScrubFilter
