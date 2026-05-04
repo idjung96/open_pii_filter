@@ -18,6 +18,9 @@ dependencies = [
     "alembic>=1.13",
     "typer>=0.12",
     "redis>=5.0",
+    # Phase 1 — PII analysis engine (Microsoft Presidio + spaCy tokenizer).
+    "presidio-analyzer>=2.2.362",
+    "spacy>=3.8",
     # Phase 4 — attachment text extraction
     "pypdfium2>=4.30",
     "pdfplumber>=0.11",
