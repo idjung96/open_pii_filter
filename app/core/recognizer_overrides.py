@@ -45,7 +45,7 @@ def get_all_overrides() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for k, v in raw.items():
         if isinstance(k, str) and isinstance(v, dict):
-            out[k] = v  # type: ignore[assignment]
+            out[k] = v
     return out
 
 
