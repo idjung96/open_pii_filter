@@ -77,9 +77,14 @@ jobs:
       - name: Bandit
         run: uv run bandit -r app/ -c pyproject.toml
 
-      - name: Create `pii` schema
+      - name: Bootstrap `pii` schema and database `search_path`
         # Alembic creates tables in the schema but does not own the schema
-        # itself; bootstrap it before `upgrade head`.
+        # itself. A handful of historical migrations (e.g. phase-2b) call
+        # `op.alter_column("pii_pattern_history", ...)` without an explicit
+        # `schema="pii"` kwarg, which means Postgres needs `search_path`
+        # to point at our schema for those statements to resolve.
+        # Setting it on the database means every subsequent connection
+        # (including alembic's) inherits it.
         run: |
           uv run python -c "
           import sqlalchemy as sa
@@ -87,6 +92,7 @@ jobs:
           eng = sa.create_engine(get_settings().database_url_sync, isolation_level='AUTOCOMMIT')
           with eng.connect() as c:
               c.execute(sa.text('CREATE SCHEMA IF NOT EXISTS pii'))
+              c.execute(sa.text('ALTER DATABASE ci SET search_path TO pii, public'))
           "
 
       - name: Alembic upgrade head
