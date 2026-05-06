@@ -58,12 +58,14 @@ router = APIRouter(prefix="/v1", tags=["detect"])
 BODY_TIMEOUT_SECONDS = 5.0
 
 # Phase 4 — Case C constraints (T4.13~T4.16).
+# Phase 4b — 한 첨부의 최대 크기를 50 MiB → 20 MiB 로 축소.
 MAX_ATTACHMENTS = 5
-MAX_ATTACHMENT_MB = 50
+MAX_ATTACHMENT_MB = 20
 MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
-# HWP / HWPX 형식 — Linux 런타임에서 파싱 불가 (pyhwpx 가 Windows 전용).
-# 작성자 IP 가 exception_ips 에 등록된 경우에만 첨부 허용 — 이 경우 PII 분석
-# 자체가 우회되므로 파싱이 필요하지 않다. 일반 작성자가 등록 시 REQ-4034.
+# HWP / HWPX 형식 — Linux 런타임에서 파싱 불가. Phase 4b 부터는 일반 IP 의
+# HWP/HWPX 첨부를 `attachment_blocklist` (REQ-4035) 가 일괄 거부하므로
+# REQ-4034 는 더 이상 새 요청에서 발생하지 않는다. 상수는 historical
+# 참조용으로 보존.
 HWP_MIME_TYPES = frozenset(
     {
         "application/hwp+zip",
@@ -512,6 +514,10 @@ async def detect_post(
                     limit=MAX_ATTACHMENTS,
                     n=n_att,
                 )
+            from app.core.blocklist_cache import is_blocked as _is_blocked_format
+
+            author_ip_for_blocklist = req.author.ip or ""
+            blocklist_bypass = is_exception_ip(author_ip_for_blocklist)
             for att in req.attachments:
                 if att.size_bytes > MAX_ATTACHMENT_BYTES:
                     return _error(
@@ -522,6 +528,25 @@ async def detect_post(
                         filename=att.filename,
                         limit=MAX_ATTACHMENT_MB,
                     )
+                # Phase 4b — runtime-managed deny list (REQ-4035) covers
+                # archives, OLE legacy Office and HWP/HWPX. Exception-IP
+                # authors bypass the gate; Phase C downstream will route
+                # their analysis result to PASS regardless of detections.
+                if not blocklist_bypass:
+                    blocked, match_kind = _is_blocked_format(
+                        filename=att.filename, mime_type=att.mime_type
+                    )
+                    if blocked:
+                        return _error(
+                            req,
+                            "REQ-4035",
+                            started=started,
+                            request=request,
+                            filename=att.filename,
+                            mime_type=att.mime_type,
+                            match_kind=match_kind or "",
+                            reason="format on deny list",
+                        )
                 if att.mime_type not in SUPPORTED_MIME_TYPES:
                     return _error(
                         req,
@@ -530,17 +555,6 @@ async def detect_post(
                         request=request,
                         filename=att.filename,
                         mime_type=att.mime_type,
-                    )
-                # HWP/HWPX 는 Linux 에서 파싱 불가 — 예외 IP 작성자만 허용.
-                if att.mime_type in HWP_MIME_TYPES and not is_exception_ip(req.author.ip or ""):
-                    return _error(
-                        req,
-                        "REQ-4034",
-                        started=started,
-                        request=request,
-                        filename=att.filename,
-                        mime_type=att.mime_type,
-                        author_ip=req.author.ip or "",
                     )
 
         # ── Body analysis with hard timeout (T1.28) ───────────────────
@@ -598,7 +612,14 @@ async def detect_post(
             )
 
         # ── Case B: body PASS, no attachments → immediate ─────────────
-        if not req.has_attachments:
+        # Phase 4b — system-wide kill switch: when an operator flips
+        # `attachment_scan_enabled` to False the gateway behaves as if
+        # the request had no attachments. The body verdict still ships;
+        # the caller's responsibility to retry later if needed.
+        from app.core import system_settings as _ss
+
+        attachment_scan_enabled = bool(_ss.get("attachment_scan_enabled"))
+        if not req.has_attachments or not attachment_scan_enabled:
             response = build_response(
                 request_id=req.request_id,
                 code=body_code,

@@ -14,6 +14,12 @@ _FILE = Path("data/system_settings.json")
 _lock = threading.Lock()
 _DEFAULTS: dict[str, object] = {
     "audit_detail_enabled": True,  # 테스트 기본 ON
+    # Phase 4b — global kill-switch for attachment scanning. When False
+    # the detect endpoint skips Case C entirely and returns the body
+    # verdict immediately; downloaded payloads are not analysed and no
+    # webhook is dispatched. Operators flip this from the admin
+    # dashboard during incidents (e.g. ClamAV outage).
+    "attachment_scan_enabled": True,
 }
 
 

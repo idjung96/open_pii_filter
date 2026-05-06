@@ -89,8 +89,9 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 | 9 | 멱등성 체크 (`request_id` 24h 캐시 — 중복 → 캐시 응답 반환) | `REQ-4005` (in-progress) |
 | 10 | 요청 스키마 검증 (pydantic) | `REQ-4001~4004` |
 | 11 | 본문 길이 검증 (`title` ≤ 500, `body` ≤ 50,000) | `REQ-4030` |
-| 12 | 첨부 사전 검증 (`callback_url` 필수 / 개수 ≤ 5 / 크기 ≤ 50 MiB / 지원 MIME) | `REQ-4031~4033` |
-| 13 | **HWP/HWPX × 예외 IP 검사** — 일반 IP 의 한글 파일 첨부 거절 | `REQ-4034` (403) |
+| 12 | 첨부 사전 검증 (`callback_url` 필수 / 개수 ≤ 5 / 크기 ≤ **20 MiB** / 지원 MIME) | `REQ-4031~4033` |
+| 13 | **첨부 deny list (DB)** — 압축·HWP/HWPX·legacy OLE Office 등을 확장자/MIME 으로 거절. 예외 IP 작성자는 우회. | `REQ-4035` (415) |
+| — | `attachment_scan_enabled` 전역 토글이 OFF 면 첨부 처리 자체를 skip 하고 본문 결과만 즉시 반환 (Case B 처럼) | — |
 
 ### 4. 본문 PII 분석
 
@@ -151,6 +152,47 @@ extraction_jobs 테이블 status=completed 갱신
 | 23 | `AuditMiddleware` 가 응답 status / response_code / 탐지 entity_type 등을 `audit_events` 에 fire-and-forget INSERT | `audit_middleware.py` |
 | 24 | (system_settings.audit_detail_enabled=true 이면) 요청/응답 본문 16 KiB + 헤더(민감 헤더 마스킹) 함께 저장 | 운영 시 OFF 권장 |
 | 25 | Prometheus 카운터/히스토그램 갱신 | `metrics_collector.py` |
+
+---
+
+## 첨부파일 정책 (Phase 4b)
+
+### 한도
+
+- 첨부 1건당 최대 **20 MiB** (`MAX_ATTACHMENT_BYTES`)
+- 한 요청당 최대 **5개**
+
+### 차단 (deny list — DB 기반, 운영 중 변경 가능)
+
+`pii.attachment_blocklist` 테이블이 거절 대상을 보관합니다. 마이그레이션이
+다음 기본 항목을 시드합니다 — 운영자는 admin API 로 가감 가능합니다.
+
+| 분류 | 항목 |
+|------|------|
+| 압축 | `zip, rar, 7z, tar, gz, bz2, xz, tgz, tbz, txz, lz, lz4, zst, cab, arj, iso, lzma, z, ace, sit, dmg, alz, egg` |
+| HWP/HWPX | 모든 한글 파일 (Linux 런타임에서 안전한 추출 어려움) |
+| Legacy OLE Office | `doc, xls, ppt` — MIT/BSD 라이선스 추출기 부재 (xlsx/pptx 만 지원) |
+
+거절은 `REQ-4035 ATTACHMENT_BLOCKED_FORMAT` (HTTP 415) 으로 응답합니다.
+`exception_ips` 에 등록된 작성자는 deny list 를 우회합니다.
+
+### 운영 인터페이스
+
+```
+GET    /v1/admin/attachment-blocklist          # 현재 deny list 조회
+POST   /v1/admin/attachment-blocklist          # 항목 추가 — body: {extension, mime_type, reason}
+DELETE /v1/admin/attachment-blocklist/{row_id} # 항목 제거
+```
+
+3개 엔드포인트 모두 `require_admin` (HMAC + is_admin + admin_ip_allowlist)
+3중 게이트로 보호되며, 매 변경마다 in-process 캐시가 즉시 갱신됩니다.
+
+### 전역 kill switch
+
+`system_settings.attachment_scan_enabled` (관리자 대시보드에서 토글)
+를 OFF 로 두면 첨부가 있어도 다운로드/추출/분석 모두 skip 하고 본문 결과만
+즉시 반환합니다. ClamAV 같은 외부 의존이 장애 중일 때 운영 부담을 즉시
+줄이는 용도입니다.
 
 ---
 
