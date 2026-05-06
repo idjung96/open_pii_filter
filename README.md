@@ -197,6 +197,26 @@ DELETE /v1/admin/attachment-blocklist/{row_id} # 항목 제거
 entity_type 가 그대로 기록되어 운영자 가시성을 유지하며, deny list
 (HWP/HWPX/압축 등) 도 우회합니다.
 
+### 첨부 BLOCK 시 게시글 자동 삭제
+
+첨부 처리 결과가 BLOCK (BLOCK-2010 / BLOCK-2011 / BLOCK-2012 / BLOCK-2008
+등) 인 경우, pii_filter 가 같은 `callback_url` 로 **HMAC-서명된 DELETE**
+요청을 추가로 보냅니다. 게시판 시스템은 이 요청을 받아 해당 게시글을
+삭제해야 합니다.
+
+- **트리거**: 비동기 첨부 처리(Case C) 의 최종 verdict 가 BLOCK 일 때만.
+- **본문 BLOCK (Case A)**: 동기 응답으로 verdict=BLOCK 이 즉시 반환되며,
+  서비스가 그 응답을 보고 자체적으로 게시글을 삭제하므로 DELETE 호출은
+  보내지 않습니다.
+- **예외 IP audit-only**: 결과가 PASS 로 강제 전환되므로 DELETE 호출
+  없음.
+- **HMAC**: 기존 webhook POST 와 동일한 `webhook_signing_secret` + 동일한
+  canonical string (`X-Timestamp`/`X-Nonce`/`X-Signature`).
+- **본문 (request body)**: `{request_id, job_id, code, reason}` JSON.
+- **재시도**: 5회 (1s/4s/16s/64s/256s, 5xx + timeout). 모든 시도와 응답이
+  `request_id`/`job_id` correlation 과 함께 INFO+ 로 로깅되어 외부 서비스
+  실패 추적이 쉽습니다.
+
 ### 검출 PII 안내
 
 본문/첨부 결과가 BLOCK 인 경우 응답의 `user_message` 끝에 한국어 라벨
