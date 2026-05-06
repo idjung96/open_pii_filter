@@ -34,6 +34,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     Phase 9E — pattern_listener 제거 (pii_patterns 테이블 폐기).
     """
     from app.core.api_ip_caller_cache import reload_api_ip_callers
+    from app.core.blocklist_cache import reload_blocklist
     from app.core.exception_ip_cache import reload_exception_ips
     from app.db.session import get_sessionmaker
     from app.security.log_filter import install_pii_log_filter
@@ -53,6 +54,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         async with get_sessionmaker()() as bootstrap_session:
             await reload_exception_ips(bootstrap_session)
             await reload_api_ip_callers(bootstrap_session)
+            # Phase 4b — load attachment-format deny list before the
+            # detect endpoint sees its first request.
+            await reload_blocklist(bootstrap_session)
     except Exception as e:
         logger.warning("phase 9A cache preload failed: %s", e)
 
@@ -153,10 +157,13 @@ app.add_exception_handler(DashboardAuthError, dashboard_auth_exception_handler)
 # Phase 7 — admin stats router uses the same gate.
 if get_settings().admin_ip_allowlist.strip():
     from app.api.admin_audit import router as admin_audit_router
+    from app.api.admin_blocklist import router as admin_blocklist_router
     from app.api.admin_stats import router as admin_stats_router
 
     app.include_router(admin_audit_router)
     app.include_router(admin_stats_router)
+    # Phase 4b — runtime CRUD for the attachment deny list.
+    app.include_router(admin_blocklist_router)
 
 
 @app.get("/healthz")

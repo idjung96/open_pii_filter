@@ -377,3 +377,43 @@ class AlerterState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class AttachmentBlocklist(Base):
+    """Phase 4b — runtime-managed deny list for attachment formats.
+
+    A row blocks an attachment when its `extension` matches the trailing
+    suffix of the filename (case-insensitive, dot stripped) OR its
+    `mime_type` matches the request's declared MIME. At least one of the
+    two must be set per row (DB CHECK constraint).
+
+    Operators add/remove rows via `POST/DELETE /v1/admin/attachment-blocklist`;
+    the per-process cache (`app.core.blocklist_cache`) is reloaded on
+    every mutation. The seed migration ships archive (zip/rar/7z/...) and
+    legacy-OLE Office (hwp/hwpx/doc/xls/ppt) entries.
+
+    Exception-IP authors bypass the blocklist entirely (Phase 9A trust
+    semantics) — the gate lives in `app/api/detect.py`.
+    """
+
+    __tablename__ = "attachment_blocklist"
+    __table_args__ = (
+        CheckConstraint(
+            "extension IS NOT NULL OR mime_type IS NOT NULL",
+            name="ck_attachment_blocklist_match_required",
+        ),
+        {"schema": _SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    extension: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    reason: Mapped[str] = mapped_column(
+        String(200), nullable=False, default="", server_default=text("''")
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.api.schemas import BodyResult, Detection, DetectPostResponse, JobInfo
 from app.core.codes import CODES, ResponseCode, Verdict, get_code
+from app.core.entity_labels import detected_summary_kr
 
 
 def _render(template: str | None, **vars: object) -> str | None:
@@ -39,6 +40,15 @@ def build_response(
     tv = template_vars or {}
 
     user_message = _render(rc.user_message_template, **tv) or ""
+    # Phase 4b/C — when the verdict is BLOCK we append the Korean labels
+    # of the detected PII kinds so the operator can act on it ("…
+    # 검출된 항목: 주민등록번호, 전화번호"). Codes (KR_RRN etc.) never
+    # surface — only the human-readable labels — so the §2.5 forbidden
+    # filter further down the file still catches accidental leaks.
+    if rc.verdict is Verdict.BLOCK and detections:
+        summary = detected_summary_kr(detections)
+        if summary:
+            user_message = f"{user_message} (검출된 항목: {summary})".strip()
     # developer_message is only surfaced for ERROR category (§2.5).
     developer_message: str | None = None
     if rc.verdict is Verdict.ERROR:

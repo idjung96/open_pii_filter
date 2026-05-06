@@ -1454,6 +1454,24 @@ async def settings_audit_detail(
     return RedirectResponse(url="/admin/settings", status_code=303)
 
 
+@router.post("/settings/attachment-scan")
+async def settings_attachment_scan(
+    _request: Request,
+    enabled: str = Form(""),
+    _session_id: str = Depends(get_dashboard_session),
+) -> Response:
+    """Phase 4b/F — `attachment_scan_enabled` 토글 처리.
+
+    OFF 로 두면 detect 핸들러가 첨부 처리 단계 (Case C) 자체를 건너뛰고
+    본문 결과만 즉시 반환합니다. 외부 의존(ClamAV / VLM / 추출기) 이
+    장애 중일 때 트래픽을 즉시 줄이는 운영자용 kill switch 입니다.
+    """
+    from app.core import system_settings as ss
+
+    ss.set_value("attachment_scan_enabled", enabled == "on")
+    return RedirectResponse(url="/admin/settings", status_code=303)
+
+
 # ── Exception handler installed at app level ──────────────────────────────
 async def dashboard_auth_exception_handler(_request: Request, exc: Exception) -> Response:
     """Map ``DashboardAuthError`` into the carried response.

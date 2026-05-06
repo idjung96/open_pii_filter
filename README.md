@@ -1,7 +1,7 @@
 # PII Detection & Masking API
 
 기관 대표홈페이지 게시판용 개인정보 탐지·마스킹 REST API.  
-본문 및 첨부파일(PDF/DOCX/HWP/이미지)의 PII를 검사하고, 이미지는 마스킹 버전을 제공합니다.
+본문 및 첨부파일(PDF/DOCX/XLSX/PPTX/텍스트/이미지)의 PII를 검사하고, 이미지는 마스킹 버전을 제공합니다.
 
 ---
 
@@ -36,7 +36,7 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 | 기능 | 설명 |
 |------|------|
 | **텍스트 PII 탐지** | 주민등록번호, 운전면허, 여권, 전화번호, 이메일, 계좌번호 등 |
-| **첨부파일 분석** | PDF, DOCX, HWP/HWPX, 이미지 (비동기 처리 + 웹훅) |
+| **첨부파일 분석** | PDF, DOCX, XLSX, PPTX, 텍스트(.txt/.md), 이미지 (비동기 처리 + 웹훅) |
 | **이미지 OCR** | vLLM Qwen3.5-27B-GPTQ-Int4 (기본) / PaddleOCR (에어갭 대안) |
 | **HMAC 인증** | API 키 + HMAC-SHA256 서명 + ±5분 타임스탬프 창 |
 | **감사 로그** | append-only (DB 트리거), 1년 보존 |
@@ -89,14 +89,15 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 | 9 | 멱등성 체크 (`request_id` 24h 캐시 — 중복 → 캐시 응답 반환) | `REQ-4005` (in-progress) |
 | 10 | 요청 스키마 검증 (pydantic) | `REQ-4001~4004` |
 | 11 | 본문 길이 검증 (`title` ≤ 500, `body` ≤ 50,000) | `REQ-4030` |
-| 12 | 첨부 사전 검증 (`callback_url` 필수 / 개수 ≤ 5 / 크기 ≤ 50 MiB / 지원 MIME) | `REQ-4031~4033` |
-| 13 | **HWP/HWPX × 예외 IP 검사** — 일반 IP 의 한글 파일 첨부 거절 | `REQ-4034` (403) |
+| 12 | 첨부 사전 검증 (`callback_url` 필수 / 개수 ≤ 5 / 크기 ≤ **20 MiB** / 지원 MIME) | `REQ-4031~4033` |
+| 13 | **첨부 deny list (DB)** — 압축·HWP/HWPX·legacy OLE Office 등을 확장자/MIME 으로 거절. 예외 IP 작성자는 우회. | `REQ-4035` (415) |
+| — | `attachment_scan_enabled` 전역 토글이 OFF 면 첨부 처리 자체를 skip 하고 본문 결과만 즉시 반환 (Case B 처럼) | — |
 
 ### 4. 본문 PII 분석
 
 | # | 단계 | 동작 |
 |---|------|------|
-| 14 | 작성자 IP 가 `exception_ips` 매칭 | 분석 우회 → PASS 즉시 |
+| 14 | 작성자 IP 가 `exception_ips` 매칭 | 분석은 진행하되 응답은 PASS 강제 (audit-only) |
 | 15 | Presidio AnalyzerEngine 호출 (커스텀 KR 7개 + 내장 6개) | `RecognizerResult[]` |
 | 16 | NER overlap 정리 + top-3 per span 필터 | `_filter_ner_overlap`, `_topk_per_span` |
 | 17 | strictness 임계값 (low 0.65 / medium 0.78 / high 0.88) → PASS / BLOCK | `score_to_band()` |
@@ -126,8 +127,11 @@ ClamAV 악성코드 스캔 (clamd TCP)
 MIME별 추출기 분기 (extractors/dispatcher.py)
   ├─ PDF        → pypdfium2 + pdfplumber, 스캔이면 vLLM OCR
   ├─ DOCX       → python-docx
-  ├─ HWP/HWPX   → 예외 IP 만 도달 (일반 IP 는 단계 13 에서 차단)
-  └─ Image      → vLLM Qwen3.5-VL OCR
+  ├─ XLSX       → openpyxl (모든 시트의 셀 텍스트)
+  ├─ PPTX       → python-pptx (슬라이드 + 발표자 노트)
+  ├─ 텍스트     → text/plain 또는 text/markdown 디코드
+  ├─ HWP/HWPX   → 예외 IP 우회 분기에서만 도달 (일반 IP 는 단계 13 에서 차단)
+  └─ Image      → vLLM Qwen3.5-27B-GPTQ-Int4 OCR
         ↓
 추출 텍스트 → 본문과 동일한 AnalyzerEngine 으로 PII 분석
         ↓
@@ -151,6 +155,87 @@ extraction_jobs 테이블 status=completed 갱신
 | 23 | `AuditMiddleware` 가 응답 status / response_code / 탐지 entity_type 등을 `audit_events` 에 fire-and-forget INSERT | `audit_middleware.py` |
 | 24 | (system_settings.audit_detail_enabled=true 이면) 요청/응답 본문 16 KiB + 헤더(민감 헤더 마스킹) 함께 저장 | 운영 시 OFF 권장 |
 | 25 | Prometheus 카운터/히스토그램 갱신 | `metrics_collector.py` |
+
+---
+
+## 첨부파일 정책 (Phase 4b)
+
+### 한도
+
+- 첨부 1건당 최대 **20 MiB** (`MAX_ATTACHMENT_BYTES`)
+- 한 요청당 최대 **5개**
+
+### 차단 (deny list — DB 기반, 운영 중 변경 가능)
+
+`pii.attachment_blocklist` 테이블이 거절 대상을 보관합니다. 마이그레이션이
+다음 기본 항목을 시드합니다 — 운영자는 admin API 로 가감 가능합니다.
+
+| 분류 | 항목 |
+|------|------|
+| 압축 | `zip, rar, 7z, tar, gz, bz2, xz, tgz, tbz, txz, lz, lz4, zst, cab, arj, iso, lzma, z, ace, sit, dmg, alz, egg` |
+| HWP/HWPX | 모든 한글 파일 (Linux 런타임에서 안전한 추출 어려움) |
+| Legacy OLE Office | `doc, xls, ppt` — MIT/BSD 라이선스 추출기 부재 (xlsx/pptx 만 지원) |
+
+거절은 `REQ-4035 ATTACHMENT_BLOCKED_FORMAT` (HTTP 415) 으로 응답합니다.
+`exception_ips` 에 등록된 작성자는 deny list 를 우회합니다.
+
+### 운영 인터페이스
+
+```
+GET    /v1/admin/attachment-blocklist          # 현재 deny list 조회
+POST   /v1/admin/attachment-blocklist          # 항목 추가 — body: {extension, mime_type, reason}
+DELETE /v1/admin/attachment-blocklist/{row_id} # 항목 제거
+```
+
+3개 엔드포인트 모두 `require_admin` (HMAC + is_admin + admin_ip_allowlist)
+3중 게이트로 보호되며, 매 변경마다 in-process 캐시가 즉시 갱신됩니다.
+
+### 예외 IP audit-only
+
+`pii.exception_ips` 에 등록된 작성자의 게시글은 본문/첨부 모두 분석을
+**진행하되 응답은 항상 PASS** 로 강제합니다. 감사 행에는 실제 검출된
+entity_type 가 그대로 기록되어 운영자 가시성을 유지하며, deny list
+(HWP/HWPX/압축 등) 도 우회합니다.
+
+### 첨부 BLOCK 시 게시글 자동 삭제
+
+첨부 처리 결과가 BLOCK (BLOCK-2010 / BLOCK-2011 / BLOCK-2012 / BLOCK-2008
+등) 인 경우, pii_filter 가 같은 `callback_url` 로 **HMAC-서명된 DELETE**
+요청을 추가로 보냅니다. 게시판 시스템은 이 요청을 받아 해당 게시글을
+삭제해야 합니다.
+
+- **트리거**: 비동기 첨부 처리(Case C) 의 최종 verdict 가 BLOCK 일 때만.
+- **본문 BLOCK (Case A)**: 동기 응답으로 verdict=BLOCK 이 즉시 반환되며,
+  서비스가 그 응답을 보고 자체적으로 게시글을 삭제하므로 DELETE 호출은
+  보내지 않습니다.
+- **예외 IP audit-only**: 결과가 PASS 로 강제 전환되므로 DELETE 호출
+  없음.
+- **HMAC**: 기존 webhook POST 와 동일한 `webhook_signing_secret` + 동일한
+  canonical string (`X-Timestamp`/`X-Nonce`/`X-Signature`).
+- **본문 (request body)**: `{request_id, job_id, code, reason}` JSON.
+- **재시도**: 5회 (1s/4s/16s/64s/256s, 5xx + timeout). 모든 시도와 응답이
+  `request_id`/`job_id` correlation 과 함께 INFO+ 로 로깅되어 외부 서비스
+  실패 추적이 쉽습니다.
+
+### 검출 PII 안내
+
+본문/첨부 결과가 BLOCK 인 경우 응답의 `user_message` 끝에 한국어 라벨
+요약이 붙습니다 (예: `… 게시할 수 없습니다. (검출된 항목: 주민등록번호,
+전화번호)`). entity_type 코드(KR_RRN 등) 는 절대 노출되지 않으며,
+`app/api/responses.py` 의 `user_message_safety_violations` 가 매 응답
+빌드 시점에 §2.5 금지 토큰을 다시 차단합니다.
+
+### 전역 kill switch
+
+`system_settings.attachment_scan_enabled` (기본 ON) 을 OFF 로 두면 첨부가
+있어도 다운로드/추출/분석 모두 skip 하고 본문 결과만 즉시 반환합니다.
+ClamAV / VLM / 추출기 같은 외부 의존이 장애 중일 때 운영 부담을 즉시
+줄이는 용도입니다.
+
+**관리자 대시보드 토글**: `/admin/settings` 페이지의 "첨부파일 검사" 카드
+에서 즉시 ON/OFF 가능. 폼 제출은 `POST /admin/settings/attachment-scan`
+로 라우팅되며 변경은 `data/system_settings.json` 에 영속됩니다 (재배포
+필요 없음).
 
 ---
 

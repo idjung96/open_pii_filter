@@ -58,12 +58,14 @@ router = APIRouter(prefix="/v1", tags=["detect"])
 BODY_TIMEOUT_SECONDS = 5.0
 
 # Phase 4 — Case C constraints (T4.13~T4.16).
+# Phase 4b — 한 첨부의 최대 크기를 50 MiB → 20 MiB 로 축소.
 MAX_ATTACHMENTS = 5
-MAX_ATTACHMENT_MB = 50
+MAX_ATTACHMENT_MB = 20
 MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
-# HWP / HWPX 형식 — Linux 런타임에서 파싱 불가 (pyhwpx 가 Windows 전용).
-# 작성자 IP 가 exception_ips 에 등록된 경우에만 첨부 허용 — 이 경우 PII 분석
-# 자체가 우회되므로 파싱이 필요하지 않다. 일반 작성자가 등록 시 REQ-4034.
+# HWP / HWPX 형식 — Linux 런타임에서 파싱 불가. Phase 4b 부터는 일반 IP 의
+# HWP/HWPX 첨부를 `attachment_blocklist` (REQ-4035) 가 일괄 거부하므로
+# REQ-4034 는 더 이상 새 요청에서 발생하지 않는다. 상수는 historical
+# 참조용으로 보존.
 HWP_MIME_TYPES = frozenset(
     {
         "application/hwp+zip",
@@ -78,15 +80,15 @@ SUPPORTED_MIME_TYPES = frozenset(
     {
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/hwp+zip",
-        "application/x-hwpx",
-        "application/haansofthwpx",
-        # HWP 5 binaries pass the size check but the extractor surfaces
-        # REQ-4033 — we accept them at the gateway so the failure carries
-        # the intended user message ("file '<name>' format is unsupported").
-        "application/x-hwp",
-        "application/haansofthwp",
+        # Phase 4b — xlsx / pptx replace the legacy OLE doc/xls/ppt path
+        # (those live on the deny list).
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        # Phase 4b — HWP/HWPX 는 deny list 가 일괄 거부 (REQ-4035) 하므로
+        # SUPPORTED_MIME_TYPES 에는 더 이상 포함되지 않는다. 예외 IP 작성자도
+        # 추출 자체는 시도하지만, 그 경로는 별도 우회 분기로 처리된다.
         "text/plain",
+        "text/markdown",
         # Phase 5 — image OCR
         "image/jpeg",
         "image/png",
@@ -354,30 +356,6 @@ def _envelope(
     return JSONResponse(status_code=rc.http_status, content=resp.model_dump(mode="json"))
 
 
-def _ok_pass(
-    req: DetectPostRequest,
-    *,
-    started: float,
-    request: Request | None = None,
-    cache: IdempotencyCache | None = None,
-) -> JSONResponse:
-    """Phase 9A — emit OK-0000 PASS without running the analyzer.
-
-    Used when the post author's IP is on the exception list. We still
-    cache the response against the request_id and stash audit metadata
-    so operators see "exception_ip" rows in the log.
-    """
-    response = build_response(
-        request_id=req.request_id,
-        code="OK-0000",
-        processing_ms=int((time.perf_counter() - started) * 1000),
-        detections=[],
-    )
-    if cache is not None:
-        cache.complete(req.request_id, response)
-    return _envelope(response, request=request, detections=[])
-
-
 def _stash_audit(
     request: Request,
     *,
@@ -460,13 +438,14 @@ async def detect_post(
     if outcome is ReserveOutcome.COMPLETED and cached is not None:
         return _envelope(cached, request=request, detections=cached.detections)
 
-    # ── Phase 9A — exception IP short-circuit ─────────────────────────
-    # When the post author's IP is on the exception list we skip the
-    # body PII analysis and emit OK-0000 immediately. The shadow / log
-    # passes are also skipped because there is no caller-visible
-    # verdict to compare against.
-    if is_exception_ip(req.author.ip or ""):
-        return _ok_pass(req, started=started, request=request, cache=cache)
+    # ── Phase 4b/C — exception-IP audit-only mode ─────────────────────
+    # Phase 9A used to short-circuit here and skip the analyzer entirely
+    # for trusted authors, which meant the audit log carried no signal.
+    # The new policy keeps the analysis running on both body and
+    # attachments but forces the user-facing verdict to PASS — the audit
+    # row still records `detected_entity_types`, so operators retain
+    # visibility into who is publishing what.
+    audit_only = is_exception_ip(req.author.ip or "")
 
     try:
         # ── §2.8 length limits → REQ-4030 (HTTP 413) ──────────────────
@@ -512,6 +491,10 @@ async def detect_post(
                     limit=MAX_ATTACHMENTS,
                     n=n_att,
                 )
+            from app.core.blocklist_cache import is_blocked as _is_blocked_format
+
+            author_ip_for_blocklist = req.author.ip or ""
+            blocklist_bypass = is_exception_ip(author_ip_for_blocklist)
             for att in req.attachments:
                 if att.size_bytes > MAX_ATTACHMENT_BYTES:
                     return _error(
@@ -522,6 +505,25 @@ async def detect_post(
                         filename=att.filename,
                         limit=MAX_ATTACHMENT_MB,
                     )
+                # Phase 4b — runtime-managed deny list (REQ-4035) covers
+                # archives, OLE legacy Office and HWP/HWPX. Exception-IP
+                # authors bypass the gate; Phase C downstream will route
+                # their analysis result to PASS regardless of detections.
+                if not blocklist_bypass:
+                    blocked, match_kind = _is_blocked_format(
+                        filename=att.filename, mime_type=att.mime_type
+                    )
+                    if blocked:
+                        return _error(
+                            req,
+                            "REQ-4035",
+                            started=started,
+                            request=request,
+                            filename=att.filename,
+                            mime_type=att.mime_type,
+                            match_kind=match_kind or "",
+                            reason="format on deny list",
+                        )
                 if att.mime_type not in SUPPORTED_MIME_TYPES:
                     return _error(
                         req,
@@ -530,17 +532,6 @@ async def detect_post(
                         request=request,
                         filename=att.filename,
                         mime_type=att.mime_type,
-                    )
-                # HWP/HWPX 는 Linux 에서 파싱 불가 — 예외 IP 작성자만 허용.
-                if att.mime_type in HWP_MIME_TYPES and not is_exception_ip(req.author.ip or ""):
-                    return _error(
-                        req,
-                        "REQ-4034",
-                        started=started,
-                        request=request,
-                        filename=att.filename,
-                        mime_type=att.mime_type,
-                        author_ip=req.author.ip or "",
                     )
 
         # ── Body analysis with hard timeout (T1.28) ───────────────────
@@ -572,6 +563,13 @@ async def detect_post(
 
         # Phase 9D — WARN 등급 / 마스킹 결과 폐기. 검출 시 BLOCK 또는 PASS만.
 
+        # Phase 4b/C — exception-IP audit-only override. The detections
+        # remain attached to the request and travel into the audit log
+        # via `_stash_audit`, but the user-facing response code is
+        # forced to OK-0000 (PASS).
+        if audit_only:
+            body_code = "OK-0000"
+
         # ── Phase 7: shadow analyzer — fire-and-forget audit-only pass ──
         shadow_types = await _run_shadow(
             req=req,
@@ -598,7 +596,14 @@ async def detect_post(
             )
 
         # ── Case B: body PASS, no attachments → immediate ─────────────
-        if not req.has_attachments:
+        # Phase 4b — system-wide kill switch: when an operator flips
+        # `attachment_scan_enabled` to False the gateway behaves as if
+        # the request had no attachments. The body verdict still ships;
+        # the caller's responsibility to retry later if needed.
+        from app.core import system_settings as _ss
+
+        attachment_scan_enabled = bool(_ss.get("attachment_scan_enabled"))
+        if not req.has_attachments or not attachment_scan_enabled:
             response = build_response(
                 request_id=req.request_id,
                 code=body_code,
@@ -624,6 +629,7 @@ async def detect_post(
             request=request,
             log_only_types=log_only_types,
             shadow_hit_types=shadow_types,
+            audit_only=audit_only,
         )
 
     except Exception:
@@ -671,6 +677,7 @@ async def _enqueue_attachment_job(
     request: Request | None = None,
     log_only_types: set[str] | None = None,
     shadow_hit_types: set[str] | None = None,
+    audit_only: bool = False,
 ) -> JSONResponse:
     """Create an extraction job + spawn the asyncio worker.
 
@@ -711,6 +718,7 @@ async def _enqueue_attachment_job(
             strictness=req.options.strictness,
             sessionmaker=sm,
             analyzer_factory=_resolve_analyzer,
+            audit_only=audit_only,
         ),
         name=f"pii-job-{job_id}",
     )

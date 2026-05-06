@@ -418,6 +418,20 @@ _REQ: dict[str, ResponseCode] = {
             "exception-ip authors who skip PII analysis may attach these formats."
         ),
     ),
+    # Phase 4b — REQ-4034 is no longer emitted by new code paths; the
+    # generic blocklist (REQ-4035) supersedes it. Kept in the catalog for
+    # historical audit row compatibility.
+    "REQ-4035": ResponseCode(
+        code="REQ-4035",
+        http_status=415,
+        verdict=Verdict.ERROR,
+        system_message="Attachment format is on the deny list",
+        user_message_template=("첨부파일 '{filename}' 의 형식({reason})은 등록할 수 없습니다."),
+        developer_message_template=(
+            "attachment format blocked — filename={filename}, mime={mime_type}, "
+            "match={match_kind}, reason={reason}"
+        ),
+    ),
     "REQ-4040": ResponseCode(
         code="REQ-4040",
         http_status=422,

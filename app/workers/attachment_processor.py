@@ -51,7 +51,7 @@ from app.extractors.fetcher import ExtractionError, fetch_attachment
 from app.extractors.ocr import ocr_pil_pages
 from app.extractors.pdf import extract_pdf
 from app.security.metrics_collector import observe_attachment_size, observe_extraction_job
-from app.workers.webhook_sender import send_webhook, serialize_payload
+from app.workers.webhook_sender import send_delete_request, send_webhook, serialize_payload
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -266,6 +266,8 @@ async def process_attachment_job(
     *,
     analyzer_factory: Callable[[], Awaitable[AnalyzerEngine]] | None = None,
     webhook_sender: Callable[..., Awaitable[bool]] | None = None,
+    delete_sender: Callable[..., Awaitable[bool]] | None = None,
+    audit_only: bool = False,
 ) -> None:
     """Run the Case-C async pipeline end-to-end.
 
@@ -273,6 +275,7 @@ async def process_attachment_job(
     raised exception is logged + recorded on the job row.
     """
     sender = webhook_sender or send_webhook
+    deleter = delete_sender or send_delete_request
 
     try:
         async with sessionmaker() as session:
@@ -310,6 +313,12 @@ async def process_attachment_job(
                 )
 
         verdict, overall_code = _overall_verdict(body_verdict, attachment_results)
+        # Phase 4b/C — exception-IP audit-only override.
+        # Detections stay in `attachment_results` for the audit row;
+        # only the user-facing verdict + code are demoted to PASS.
+        if audit_only:
+            verdict = Verdict.PASS
+            overall_code = "OK-0000"
         rc = get_code(overall_code)
         # user_message rendering uses {filename} for BLOCK-2010 — pull
         # the first BLOCK attachment's filename so the message resolves.
@@ -323,6 +332,20 @@ async def process_attachment_job(
             )
         except (KeyError, IndexError):
             user_message = rc.user_message_template
+
+        # Phase 4b/C — append the Korean labels of detected PII kinds so
+        # the bulletin board operator knows what to act on. Only when
+        # the final verdict is BLOCK; in audit-only / PASS the analysis
+        # is internal and the user_message stays clean.
+        if verdict is Verdict.BLOCK:
+            from app.core.entity_labels import detected_summary_kr
+
+            all_dets: list[Detection] = []
+            for r in attachment_results:
+                all_dets.extend(r.detections)
+            summary = detected_summary_kr(all_dets)
+            if summary:
+                user_message = f"{user_message} (검출된 항목: {summary})".strip()
 
         payload = WebhookPayload(
             request_id=request_id,
@@ -359,6 +382,32 @@ async def process_attachment_job(
                     "still queryable via /v1/jobs/%s",
                     job_id,
                     job_id,
+                )
+
+            # Phase 4b/D — when an attachment caused the post to be
+            # marked BLOCK, fire a separate HMAC-signed DELETE at the
+            # same callback_url so the bulletin-board service removes
+            # the post. Skipped when audit-only mode demoted the
+            # verdict to PASS, and skipped when the body alone caused
+            # the BLOCK (Case A returns synchronously and the calling
+            # service handles deletion itself).
+            if verdict is Verdict.BLOCK:
+                logger.info(
+                    "callback_delete: scheduling DELETE for blocked job %s (request=%s, code=%s)",
+                    job_id,
+                    request_id,
+                    overall_code,
+                    extra={
+                        "request_id": str(request_id),
+                        "job_id": job_id,
+                        "code": overall_code,
+                    },
+                )
+                await deleter(
+                    callback_url,
+                    request_id=str(request_id),
+                    job_id=job_id,
+                    code=overall_code,
                 )
 
     except asyncio.CancelledError:

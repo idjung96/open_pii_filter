@@ -39,6 +39,38 @@
 
   <div class="col-md-8 col-lg-6">
     <div class="card">
+      <div class="card-header fw-semibold">첨부파일 검사</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          켜짐: 첨부파일을 다운로드 → 추출 → PII 분석 → 웹훅 통보. 끄면
+          첨부가 있어도 본문 결과만 즉시 응답하며 비동기 처리는 건너뜁니다
+          (ClamAV/추출기 장애 시 일시적으로 끔).
+        </p>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <span>현재 상태:</span>
+          {% if settings.get('attachment_scan_enabled') %}
+            <span class="badge bg-success fs-6">ON</span>
+          {% else %}
+            <span class="badge bg-secondary fs-6">OFF</span>
+          {% endif %}
+        </div>
+        <form method="post" action="/admin/settings/attachment-scan">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="attachmentScanSwitch" name="enabled" value="on"
+                   {% if settings.get('attachment_scan_enabled') %}checked{% endif %}>
+            <label class="form-check-label" for="attachmentScanSwitch">
+              첨부파일 검사 활성화
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">저장</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8 col-lg-6">
+    <div class="card">
       <div class="card-header fw-semibold">관리자 비밀번호 변경</div>
       <div class="card-body">
         <p class="text-muted small mb-3">
