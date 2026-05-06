@@ -47,7 +47,7 @@ def _shape_text(shape: object) -> list[str]:
     shape_type_attr = getattr(shape, "shape_type", None)
     if shape_type_attr is not None:
         try:
-            from pptx.enum.shapes import MSO_SHAPE_TYPE  # type: ignore[import-not-found]
+            from pptx.enum.shapes import MSO_SHAPE_TYPE
 
             is_group = shape_type_attr == MSO_SHAPE_TYPE.GROUP
         except Exception as e:
@@ -71,7 +71,7 @@ def _shape_text(shape: object) -> list[str]:
 
 def _extract_sync(data: bytes, filename: str) -> str:
     """Synchronous core run on a worker thread."""
-    from pptx import Presentation  # type: ignore[import-not-found]
+    from pptx import Presentation
 
     if _is_encrypted_ooxml(data):
         raise ExtractionError("REQ-4051", filename=filename, detail="password-protected")
