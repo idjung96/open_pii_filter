@@ -227,10 +227,15 @@ entity_type 가 그대로 기록되어 운영자 가시성을 유지하며, deny
 
 ### 전역 kill switch
 
-`system_settings.attachment_scan_enabled` (관리자 대시보드에서 토글)
-를 OFF 로 두면 첨부가 있어도 다운로드/추출/분석 모두 skip 하고 본문 결과만
-즉시 반환합니다. ClamAV 같은 외부 의존이 장애 중일 때 운영 부담을 즉시
+`system_settings.attachment_scan_enabled` (기본 ON) 을 OFF 로 두면 첨부가
+있어도 다운로드/추출/분석 모두 skip 하고 본문 결과만 즉시 반환합니다.
+ClamAV / VLM / 추출기 같은 외부 의존이 장애 중일 때 운영 부담을 즉시
 줄이는 용도입니다.
+
+**관리자 대시보드 토글**: `/admin/settings` 페이지의 "첨부파일 검사" 카드
+에서 즉시 ON/OFF 가능. 폼 제출은 `POST /admin/settings/attachment-scan`
+로 라우팅되며 변경은 `data/system_settings.json` 에 영속됩니다 (재배포
+필요 없음).
 
 ---
 
