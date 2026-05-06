@@ -232,6 +232,28 @@ sum(increase(extraction_jobs_total{status="PROCESSING"}[10m]))
 
 # Rate-limit 거부 폭주
 sum by (scope) (rate(rate_limit_rejections_total[5m]))
+
+# 탐지 API 호출 수 (verdict 무관 합계)
+sum(rate(pii_detect_requests_total[1m])) * 60
+
+# 차단된 호출 수 (verdict="BLOCK" 만)
+sum(rate(pii_detect_requests_total{verdict="BLOCK"}[1m])) * 60
+
+# 차단 비율 = 차단 수 / 전체 호출 수
+sum(rate(pii_detect_requests_total{verdict="BLOCK"}[5m]))
+  / sum(rate(pii_detect_requests_total[5m]))
+
+# OCR p95 지연 (엔진별)
+histogram_quantile(
+  0.95,
+  sum by (le, engine) (rate(ocr_duration_seconds_bucket[5m]))
+)
+
+# 첨부파일 크기 p95 (호출별 분포)
+histogram_quantile(
+  0.95,
+  sum by (le) (rate(attachment_size_bytes_bucket[5m]))
+)
 ```
 
 ### 5.2 Grafana 대시보드 import

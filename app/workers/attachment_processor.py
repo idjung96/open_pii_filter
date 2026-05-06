@@ -50,7 +50,7 @@ from app.extractors.dispatcher import (
 from app.extractors.fetcher import ExtractionError, fetch_attachment
 from app.extractors.ocr import ocr_pil_pages
 from app.extractors.pdf import extract_pdf
-from app.security.metrics_collector import observe_extraction_job
+from app.security.metrics_collector import observe_attachment_size, observe_extraction_job
 from app.workers.webhook_sender import send_webhook, serialize_payload
 
 if TYPE_CHECKING:
@@ -176,6 +176,7 @@ async def _process_one_attachment(
     analyzer: AnalyzerEngine,
 ) -> WebhookAttachmentResult:
     """Run the full per-attachment pipeline; never raises."""
+    observe_attachment_size(size_bytes=attachment.size_bytes)
     try:
         data = await fetch_attachment(attachment)
         await scan_bytes(data, attachment.filename)

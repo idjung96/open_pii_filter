@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -91,6 +92,8 @@ def _normalise(image: PILImage) -> PILImage:
 
 async def _run_engine(image: PILImage, *, filename: str) -> OCRResult:
     """Dispatch to the configured engine and translate engine errors."""
+    from app.security.metrics_collector import observe_ocr_duration
+
     settings = get_settings()
     engine = settings.ocr_engine
 
@@ -98,23 +101,35 @@ async def _run_engine(image: PILImage, *, filename: str) -> OCRResult:
         from app.extractors.ocr_paddle import is_paddle_available, paddle_ocr
 
         if is_paddle_available():
+            started = time.perf_counter()
             try:
-                return await paddle_ocr(image)
+                result = await paddle_ocr(image)
             except Exception as e:
+                # The fallback below produces its own observation, so we
+                # still record this attempt's elapsed time labelled with
+                # the engine that actually ran.
+                observe_ocr_duration(engine="paddle", seconds=time.perf_counter() - started)
                 logger.warning(
                     "paddle OCR failed for %s (%s); falling back to VLM",
                     filename,
                     e,
                 )
+            else:
+                observe_ocr_duration(engine="paddle", seconds=time.perf_counter() - started)
+                return result
         else:
             logger.warning("paddle OCR requested but paddleocr not installed; falling back to VLM")
         # Fall through to VLM.
 
     # Default / fallback path: VLM.
+    started = time.perf_counter()
     try:
-        return await vlm_ocr(image, settings=settings)
+        result = await vlm_ocr(image, settings=settings)
     except VLMError as e:
+        observe_ocr_duration(engine="vlm", seconds=time.perf_counter() - started)
         raise ExtractionError("SVR-5004", filename=filename, detail=f"VLM unavailable: {e}") from e
+    observe_ocr_duration(engine="vlm", seconds=time.perf_counter() - started)
+    return result
 
 
 def _shift_boxes(boxes: list[OCRBox], dy: int) -> list[OCRBox]:

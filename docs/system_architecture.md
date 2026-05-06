@@ -431,14 +431,19 @@ AuditMiddleware
   http_request_duration_seconds{...}  .observe() (Histogram)
        │
        ▼
-detect_post 핸들러
+detect_post 핸들러 (_envelope / _error 응답 funnel)
+  pii_detect_requests_total{verdict} ++ (Counter)
+      └─ 호출 수 = sum(...), 차단 수 = verdict="BLOCK" 필터
   pii_detections_total{entity_type, verdict} ++ (Counter)
        │
        ▼
-attachment_processor
-  extraction_job_duration_seconds .observe()
-  extraction_jobs_total{result} ++
-
+attachment_processor (_process_one_attachment 진입)
+  attachment_size_bytes .observe()  (첨부 1건당 크기 분포)
+  extraction_jobs_total{status} ++  (PROCESSING/COMPLETED/FAILED)
+       │
+       ▼
+OCR 엔진 _run_engine (vlm / paddle 분기)
+  ocr_duration_seconds{engine} .observe()
        │
        ▼ (스크레이핑)
 Prometheus ──GET /v1/admin/metrics──► 메트릭 수집 서버
