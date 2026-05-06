@@ -161,19 +161,23 @@ def make_encrypted_pdf() -> bytes:
     """Trivially-encrypted PDF the parsers will reject with a password hint.
 
     Real encryption would require a full crypto handler; we simulate by
-    injecting an /Encrypt entry into the trailer so pdfplumber/pypdfium2
-    surface a 'password' / 'encrypted' error.
+    injecting an /Encrypt entry into the trailer dict so pdfplumber and
+    pypdfium2 raise the password error path. The trailer dict opener
+    can be either ``<<`` or ``<<\\n`` depending on whether the PDF came
+    from reportlab or the hand-rolled writer, so we inject just after
+    the first ``<<`` of the trailer block.
     """
     base = make_text_pdf()
-    # Inject a fake /Encrypt reference so pdfium recognises the file as
-    # password-protected. pdfium's error message contains "password".
     trailer_pos = base.rfind(b"trailer")
     if trailer_pos < 0:
         return base
     head = base[:trailer_pos]
     tail = base[trailer_pos:]
-    # Replace ``<< /Size N /Root ...>>`` with a version including /Encrypt 99 0 R
-    tail = tail.replace(b"<< /Size", b"<< /Encrypt 99 0 R /Size", 1)
+    open_pos = tail.find(b"<<")
+    if open_pos < 0:
+        return base
+    insert_at = open_pos + 2
+    tail = tail[:insert_at] + b"\n/Encrypt 99 0 R" + tail[insert_at:]
     return head + tail
 
 
@@ -219,3 +223,51 @@ def make_hwp5_binary() -> bytes:
 # ── Plain text ───────────────────────────────────────────────────────────
 def make_text_file(text: str = SYNTH_TEXT) -> bytes:
     return text.encode("utf-8")
+
+
+# ── Phase 4b: synthetic XLSX / PPTX / Markdown ────────────────────────────
+def make_xlsx_with_pii(text: str = SYNTH_TEXT) -> bytes:
+    """Single-sheet workbook with `text` placed at A1.
+
+    Tests assert the extractor walks every cell of every sheet — so the
+    fixture also writes a numeric value at A2 to verify non-string cells
+    are stringified rather than dropped.
+    """
+    from openpyxl import Workbook  # type: ignore[import-untyped]
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = "synthetic"
+    sheet["A1"] = text
+    sheet["A2"] = 1234567890
+    sheet["B1"] = SYNTH_PHONE
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def make_pptx_with_pii(text: str = SYNTH_TEXT) -> bytes:
+    """Two-slide deck — body shape on slide 1, speaker note on slide 2."""
+    from pptx import Presentation  # type: ignore[import-not-found]
+    from pptx.util import Inches  # type: ignore[import-not-found]
+
+    prs = Presentation()
+    blank = prs.slide_layouts[6]  # built-in "blank" layout
+
+    slide1 = prs.slides.add_slide(blank)
+    box = slide1.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(2))
+    box.text_frame.text = text
+
+    slide2 = prs.slides.add_slide(blank)
+    notes_tf = slide2.notes_slide.notes_text_frame
+    notes_tf.text = f"reviewer note: {SYNTH_EMAIL}"
+
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def make_markdown_with_pii(text: str = SYNTH_TEXT) -> bytes:
+    """Markdown document — header + bullet to mimic real input shape."""
+    md = f"# 합성 테스트 문서\n\n- 본문: {text}\n- 연락처: {SYNTH_PHONE}\n"
+    return md.encode("utf-8")

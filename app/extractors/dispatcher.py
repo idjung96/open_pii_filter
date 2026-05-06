@@ -29,6 +29,8 @@ from app.extractors.hwpx import HWP5_MIMES, extract_hwpx
 from app.extractors.ocr import IMAGE_MIME_TYPES, ocr_image, ocr_pil_pages
 from app.extractors.ocr_vlm import OCRBox, OCRResult
 from app.extractors.pdf import extract_pdf
+from app.extractors.pptx import extract_pptx
+from app.extractors.xlsx import extract_xlsx
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage
@@ -43,6 +45,19 @@ DOCX_MIMES = frozenset(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
 )
+# Phase 4b — XLSX (SpreadsheetML) and PPTX (PresentationML) replace the
+# legacy OLE doc/xls/ppt path. The legacy formats live on the
+# `attachment_blocklist` deny list and never reach this dispatcher.
+XLSX_MIMES = frozenset(
+    {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+)
+PPTX_MIMES = frozenset(
+    {
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }
+)
 HWPX_MIMES = frozenset(
     {
         "application/hwp+zip",
@@ -50,7 +65,8 @@ HWPX_MIMES = frozenset(
         "application/haansofthwpx",
     }
 )
-TEXT_MIMES = frozenset({"text/plain"})
+# Phase 4b — `text/markdown` joins `text/plain` on the text-decoding path.
+TEXT_MIMES = frozenset({"text/plain", "text/markdown"})
 
 
 def _render_pdf_pages_sync(data: bytes, filename: str) -> list[PILImage]:
@@ -142,6 +158,14 @@ async def dispatch_extract(data: bytes, attachment: Attachment) -> tuple[str, bo
         text = await extract_docx(data, attachment.filename)
         return text, False
 
+    if mime in XLSX_MIMES:
+        text = await extract_xlsx(data, attachment.filename)
+        return text, False
+
+    if mime in PPTX_MIMES:
+        text = await extract_pptx(data, attachment.filename)
+        return text, False
+
     if mime in HWPX_MIMES:
         text = await extract_hwpx(data, attachment.filename, mime)
         return text, False
@@ -184,7 +208,9 @@ __all__ = [
     "HWPX_MIMES",
     "IMAGE_MIME_TYPES",
     "PDF_MIMES",
+    "PPTX_MIMES",
     "TEXT_MIMES",
+    "XLSX_MIMES",
     "OCRBox",
     "OCRResult",
     "dispatch_extract",

@@ -27,6 +27,10 @@ dependencies = [
     "pypdfium2>=4.30",
     "pdfplumber>=0.11",
     "python-docx>=1.1",
+    # Phase 4b — xlsx / pptx text extractors (MIT-licensed alternatives
+    # to legacy OLE binaries, which the deny list rejects).
+    "openpyxl>=3.1",
+    "python-pptx>=1.0",
     "clamd>=1.0.2",
     "lxml>=5.0",
     "httpx>=0.27",
@@ -52,6 +56,8 @@ dev = [
     # Phase 8 — load testing + dependency vuln scan (T8.2/T8.5).
     "locust>=2.30",
     "pip-audit>=2.7",
+    # Phase 4b — synthetic PDF/scan-PDF generation in test fixtures.
+    "reportlab>=4.0",
 ]
 # Phase 5 — optional PaddleOCR engine. The default OCR engine is the
 # internal VLM endpoint; install [ocr] only if you want to switch

@@ -80,15 +80,15 @@ SUPPORTED_MIME_TYPES = frozenset(
     {
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/hwp+zip",
-        "application/x-hwpx",
-        "application/haansofthwpx",
-        # HWP 5 binaries pass the size check but the extractor surfaces
-        # REQ-4033 — we accept them at the gateway so the failure carries
-        # the intended user message ("file '<name>' format is unsupported").
-        "application/x-hwp",
-        "application/haansofthwp",
+        # Phase 4b — xlsx / pptx replace the legacy OLE doc/xls/ppt path
+        # (those live on the deny list).
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        # Phase 4b — HWP/HWPX 는 deny list 가 일괄 거부 (REQ-4035) 하므로
+        # SUPPORTED_MIME_TYPES 에는 더 이상 포함되지 않는다. 예외 IP 작성자도
+        # 추출 자체는 시도하지만, 그 경로는 별도 우회 분기로 처리된다.
         "text/plain",
+        "text/markdown",
         # Phase 5 — image OCR
         "image/jpeg",
         "image/png",

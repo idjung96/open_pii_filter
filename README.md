@@ -1,7 +1,7 @@
 # PII Detection & Masking API
 
 기관 대표홈페이지 게시판용 개인정보 탐지·마스킹 REST API.  
-본문 및 첨부파일(PDF/DOCX/HWP/이미지)의 PII를 검사하고, 이미지는 마스킹 버전을 제공합니다.
+본문 및 첨부파일(PDF/DOCX/XLSX/PPTX/텍스트/이미지)의 PII를 검사하고, 이미지는 마스킹 버전을 제공합니다.
 
 ---
 
@@ -36,7 +36,7 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 | 기능 | 설명 |
 |------|------|
 | **텍스트 PII 탐지** | 주민등록번호, 운전면허, 여권, 전화번호, 이메일, 계좌번호 등 |
-| **첨부파일 분석** | PDF, DOCX, HWP/HWPX, 이미지 (비동기 처리 + 웹훅) |
+| **첨부파일 분석** | PDF, DOCX, XLSX, PPTX, 텍스트(.txt/.md), 이미지 (비동기 처리 + 웹훅) |
 | **이미지 OCR** | vLLM Qwen3.5-27B-GPTQ-Int4 (기본) / PaddleOCR (에어갭 대안) |
 | **HMAC 인증** | API 키 + HMAC-SHA256 서명 + ±5분 타임스탬프 창 |
 | **감사 로그** | append-only (DB 트리거), 1년 보존 |
@@ -127,8 +127,11 @@ ClamAV 악성코드 스캔 (clamd TCP)
 MIME별 추출기 분기 (extractors/dispatcher.py)
   ├─ PDF        → pypdfium2 + pdfplumber, 스캔이면 vLLM OCR
   ├─ DOCX       → python-docx
-  ├─ HWP/HWPX   → 예외 IP 만 도달 (일반 IP 는 단계 13 에서 차단)
-  └─ Image      → vLLM Qwen3.5-VL OCR
+  ├─ XLSX       → openpyxl (모든 시트의 셀 텍스트)
+  ├─ PPTX       → python-pptx (슬라이드 + 발표자 노트)
+  ├─ 텍스트     → text/plain 또는 text/markdown 디코드
+  ├─ HWP/HWPX   → 예외 IP 우회 분기에서만 도달 (일반 IP 는 단계 13 에서 차단)
+  └─ Image      → vLLM Qwen3.5-27B-GPTQ-Int4 OCR
         ↓
 추출 텍스트 → 본문과 동일한 AnalyzerEngine 으로 PII 분석
         ↓
