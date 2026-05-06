@@ -266,6 +266,7 @@ async def process_attachment_job(
     *,
     analyzer_factory: Callable[[], Awaitable[AnalyzerEngine]] | None = None,
     webhook_sender: Callable[..., Awaitable[bool]] | None = None,
+    audit_only: bool = False,
 ) -> None:
     """Run the Case-C async pipeline end-to-end.
 
@@ -310,6 +311,12 @@ async def process_attachment_job(
                 )
 
         verdict, overall_code = _overall_verdict(body_verdict, attachment_results)
+        # Phase 4b/C — exception-IP audit-only override.
+        # Detections stay in `attachment_results` for the audit row;
+        # only the user-facing verdict + code are demoted to PASS.
+        if audit_only:
+            verdict = Verdict.PASS
+            overall_code = "OK-0000"
         rc = get_code(overall_code)
         # user_message rendering uses {filename} for BLOCK-2010 — pull
         # the first BLOCK attachment's filename so the message resolves.
@@ -323,6 +330,20 @@ async def process_attachment_job(
             )
         except (KeyError, IndexError):
             user_message = rc.user_message_template
+
+        # Phase 4b/C — append the Korean labels of detected PII kinds so
+        # the bulletin board operator knows what to act on. Only when
+        # the final verdict is BLOCK; in audit-only / PASS the analysis
+        # is internal and the user_message stays clean.
+        if verdict is Verdict.BLOCK:
+            from app.core.entity_labels import detected_summary_kr
+
+            all_dets: list[Detection] = []
+            for r in attachment_results:
+                all_dets.extend(r.detections)
+            summary = detected_summary_kr(all_dets)
+            if summary:
+                user_message = f"{user_message} (검출된 항목: {summary})".strip()
 
         payload = WebhookPayload(
             request_id=request_id,

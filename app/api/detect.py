@@ -356,30 +356,6 @@ def _envelope(
     return JSONResponse(status_code=rc.http_status, content=resp.model_dump(mode="json"))
 
 
-def _ok_pass(
-    req: DetectPostRequest,
-    *,
-    started: float,
-    request: Request | None = None,
-    cache: IdempotencyCache | None = None,
-) -> JSONResponse:
-    """Phase 9A — emit OK-0000 PASS without running the analyzer.
-
-    Used when the post author's IP is on the exception list. We still
-    cache the response against the request_id and stash audit metadata
-    so operators see "exception_ip" rows in the log.
-    """
-    response = build_response(
-        request_id=req.request_id,
-        code="OK-0000",
-        processing_ms=int((time.perf_counter() - started) * 1000),
-        detections=[],
-    )
-    if cache is not None:
-        cache.complete(req.request_id, response)
-    return _envelope(response, request=request, detections=[])
-
-
 def _stash_audit(
     request: Request,
     *,
@@ -462,13 +438,14 @@ async def detect_post(
     if outcome is ReserveOutcome.COMPLETED and cached is not None:
         return _envelope(cached, request=request, detections=cached.detections)
 
-    # ── Phase 9A — exception IP short-circuit ─────────────────────────
-    # When the post author's IP is on the exception list we skip the
-    # body PII analysis and emit OK-0000 immediately. The shadow / log
-    # passes are also skipped because there is no caller-visible
-    # verdict to compare against.
-    if is_exception_ip(req.author.ip or ""):
-        return _ok_pass(req, started=started, request=request, cache=cache)
+    # ── Phase 4b/C — exception-IP audit-only mode ─────────────────────
+    # Phase 9A used to short-circuit here and skip the analyzer entirely
+    # for trusted authors, which meant the audit log carried no signal.
+    # The new policy keeps the analysis running on both body and
+    # attachments but forces the user-facing verdict to PASS — the audit
+    # row still records `detected_entity_types`, so operators retain
+    # visibility into who is publishing what.
+    audit_only = is_exception_ip(req.author.ip or "")
 
     try:
         # ── §2.8 length limits → REQ-4030 (HTTP 413) ──────────────────
@@ -586,6 +563,13 @@ async def detect_post(
 
         # Phase 9D — WARN 등급 / 마스킹 결과 폐기. 검출 시 BLOCK 또는 PASS만.
 
+        # Phase 4b/C — exception-IP audit-only override. The detections
+        # remain attached to the request and travel into the audit log
+        # via `_stash_audit`, but the user-facing response code is
+        # forced to OK-0000 (PASS).
+        if audit_only:
+            body_code = "OK-0000"
+
         # ── Phase 7: shadow analyzer — fire-and-forget audit-only pass ──
         shadow_types = await _run_shadow(
             req=req,
@@ -645,6 +629,7 @@ async def detect_post(
             request=request,
             log_only_types=log_only_types,
             shadow_hit_types=shadow_types,
+            audit_only=audit_only,
         )
 
     except Exception:
@@ -692,6 +677,7 @@ async def _enqueue_attachment_job(
     request: Request | None = None,
     log_only_types: set[str] | None = None,
     shadow_hit_types: set[str] | None = None,
+    audit_only: bool = False,
 ) -> JSONResponse:
     """Create an extraction job + spawn the asyncio worker.
 
@@ -732,6 +718,7 @@ async def _enqueue_attachment_job(
             strictness=req.options.strictness,
             sessionmaker=sm,
             analyzer_factory=_resolve_analyzer,
+            audit_only=audit_only,
         ),
         name=f"pii-job-{job_id}",
     )

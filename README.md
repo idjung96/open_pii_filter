@@ -97,7 +97,7 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 
 | # | 단계 | 동작 |
 |---|------|------|
-| 14 | 작성자 IP 가 `exception_ips` 매칭 | 분석 우회 → PASS 즉시 |
+| 14 | 작성자 IP 가 `exception_ips` 매칭 | 분석은 진행하되 응답은 PASS 강제 (audit-only) |
 | 15 | Presidio AnalyzerEngine 호출 (커스텀 KR 7개 + 내장 6개) | `RecognizerResult[]` |
 | 16 | NER overlap 정리 + top-3 per span 필터 | `_filter_ner_overlap`, `_topk_per_span` |
 | 17 | strictness 임계값 (low 0.65 / medium 0.78 / high 0.88) → PASS / BLOCK | `score_to_band()` |
@@ -189,6 +189,21 @@ DELETE /v1/admin/attachment-blocklist/{row_id} # 항목 제거
 
 3개 엔드포인트 모두 `require_admin` (HMAC + is_admin + admin_ip_allowlist)
 3중 게이트로 보호되며, 매 변경마다 in-process 캐시가 즉시 갱신됩니다.
+
+### 예외 IP audit-only
+
+`pii.exception_ips` 에 등록된 작성자의 게시글은 본문/첨부 모두 분석을
+**진행하되 응답은 항상 PASS** 로 강제합니다. 감사 행에는 실제 검출된
+entity_type 가 그대로 기록되어 운영자 가시성을 유지하며, deny list
+(HWP/HWPX/압축 등) 도 우회합니다.
+
+### 검출 PII 안내
+
+본문/첨부 결과가 BLOCK 인 경우 응답의 `user_message` 끝에 한국어 라벨
+요약이 붙습니다 (예: `… 게시할 수 없습니다. (검출된 항목: 주민등록번호,
+전화번호)`). entity_type 코드(KR_RRN 등) 는 절대 노출되지 않으며,
+`app/api/responses.py` 의 `user_message_safety_violations` 가 매 응답
+빌드 시점에 §2.5 금지 토큰을 다시 차단합니다.
 
 ### 전역 kill switch
 
