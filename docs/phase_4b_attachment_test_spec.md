@@ -243,19 +243,501 @@ curl -X POST http://localhost:9000/v1/admin/attachment-blocklist \
 
 ---
 
-## 11. 수동 통합 검증 체크리스트 (배포 전)
+## 11. 수동 통합 검증 런북 (배포 전)
 
-운영 환경 배포 직전 다음을 차례로 확인합니다.
+자동화는 핸들러 분기와 헬퍼를 잡지만, 외부 시스템 (mock callback server,
+대시보드 브라우저 렌더, ClamAV 등) 과의 결합은 운영자가 직접 실행해야
+신뢰도가 확보됩니다. 이 런북은 그대로 복붙해서 실행 가능한 단계로
+구성됩니다.
 
-- [ ] `alembic upgrade head` 실행 → `pii.attachment_blocklist` 테이블 + 31 시드 행 존재
-- [ ] `GET /healthz` 200 OK
-- [ ] `GET /admin/login` 페이지 렌더 정상
-- [ ] `/admin/settings` 페이지에 "첨부파일 검사" / "API 사용 이력 상세 저장" 두 카드 보임
-- [ ] 토글 OFF → JSON 파일 갱신 → 첨부 있는 detect 호출 시 200 + `job=null`
-- [ ] 토글 ON 복귀 → 동일 호출이 다시 202 + `ACK-3001`
-- [ ] `zip` 첨부 호출 시 415 + `REQ-4035`
-- [ ] 정상 PDF 첨부 호출 시 202, 비동기 워커가 webhook POST 까지 마무리
-- [ ] PII 가 포함된 첨부 시나리오 → webhook 결과 BLOCK + DELETE 후속 호출이 callback_url 로 전송됨
-- [ ] callback_url 측 서버에서 HMAC 검증 통과
-- [ ] 로그에 `callback_delete: …` correlation 라인이 request_id/job_id 와 함께 보임
-- [ ] 예외 IP 등록된 작성자로 같은 시나리오 → verdict=PASS, DELETE 호출 없음, audit 로그엔 검출 entity_type 기록
+각 절차는 `[TC-…]` 로 자동화 케이스에 cross-link 되어 있고, 마지막에
+**Pass / Fail / N/A** 칸을 두어 검증 결과를 기록합니다.
+
+### 11.0 사전 환경 셋업
+
+다음 모든 절차는 한 번만 실행합니다.
+
+```bash
+# ── 1) 서버 기동 ───────────────────────────────────────────────────────
+cd /path/to/open_pii_filter
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000 &
+SERVER_PID=$!
+
+# ── 2) DB 환경 변수 (.env 와 동일하게) ───────────────────────────────
+export DB_HOST=127.0.0.1
+export DB_USER=kims
+export DB_PASS=...      # 운영자가 직접 채움
+export DB_NAME=pii_api
+export PGPASSWORD=$DB_PASS
+
+# ── 3) 마이그레이션 적용 + 시드 확인 [TC-A.1] ────────────────────────
+.venv/bin/alembic upgrade head
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c \
+  "SELECT COUNT(*) FROM pii.attachment_blocklist;"
+# 기대: count = 31
+
+# ── 4) Mock callback server (포트 9999 — DELETE/POST 모두 수신) ──────
+# 별도 터미널에서:
+mkdir -p /tmp/cb_log
+python3 - <<'PY' &
+import http.server, json, sys, datetime
+class H(http.server.BaseHTTPRequestHandler):
+    def _log(self, method, body):
+        with open("/tmp/cb_log/calls.jsonl", "a") as f:
+            f.write(json.dumps({
+                "ts": datetime.datetime.utcnow().isoformat(),
+                "method": method,
+                "path": self.path,
+                "headers": dict(self.headers),
+                "body": body.decode("utf-8", errors="replace"),
+            }) + "\n")
+    def do_POST(self):
+        n = int(self.headers.get("content-length") or "0")
+        body = self.rfile.read(n) if n else b""
+        self._log("POST", body)
+        self.send_response(204); self.end_headers()
+    def do_DELETE(self):
+        n = int(self.headers.get("content-length") or "0")
+        body = self.rfile.read(n) if n else b""
+        self._log("DELETE", body)
+        self.send_response(204); self.end_headers()
+http.server.HTTPServer(("127.0.0.1", 9999), H).serve_forever()
+PY
+CB_PID=$!
+echo "callback mock pid=$CB_PID  log=/tmp/cb_log/calls.jsonl"
+```
+
+> **정리는 §11.11 에서**. 절차 전체가 끝날 때까지 두 프로세스를 띄워둡니다.
+
+---
+
+### 11.1 헬스 + 마이그레이션 + 시드 [TC-A.1, TC-8.1]
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:9000/healthz
+# 기대 출력: 200
+```
+
+```bash
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c \
+  "SELECT extension, mime_type, reason
+     FROM pii.attachment_blocklist
+    WHERE extension IN ('hwp','hwpx','zip','7z')
+    ORDER BY extension;"
+```
+기대: 4 행 이상, 각 `reason` 채워짐.
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.1 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.2 대시보드 렌더 [TC-F]
+
+브라우저로 다음을 확인합니다.
+
+1. `http://localhost:9000/admin/login` — 로그인 폼이 보이고, dev 환경 한해
+   현재 비밀번호로 로그인 성공.
+2. 로그인 후 `http://localhost:9000/admin/settings` 진입.
+3. 페이지에 다음 두 카드가 모두 보입니다.
+   - **API 사용 이력 상세 저장** (audit_detail_enabled)
+   - **첨부파일 검사** (attachment_scan_enabled) ← 이번 PR 추가
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.2 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.3 첨부 검사 토글 OFF → 첨부 있는 detect → Case B [TC-4.1, TC-4.2, TC-4.4]
+
+```bash
+# 11.3.1 토글 OFF (대시보드 카드의 "저장" 버튼이 같은 효과)
+# 직접 JSON 갱신:
+echo '{"audit_detail_enabled": true, "attachment_scan_enabled": false}' \
+  > data/system_settings.json
+# 또는 대시보드에서 토글 후 저장 (HTTP 303 리다이렉트 확인).
+
+# 11.3.2 첨부 있는 detect 호출
+SHA=$(printf 'x%.0s' {1..1024} | sha256sum | cut -d' ' -f1)
+curl -sS -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000004001",
+  "author":{"name":"manual","ip":"203.0.113.5"},
+  "post":{"board_id":"qna","title":"toggle off test","body":"본문에는 PII 가 없습니다."},
+  "attachments":[{
+    "attachment_id":"a1","filename":"ok.pdf","size_bytes":1024,
+    "mime_type":"application/pdf","sha256":"$SHA",
+    "fetch_url":"http://127.0.0.1:9999/files/ok.pdf"
+  }],
+  "callback_url":"http://127.0.0.1:9999/cb"
+}
+JSON
+)" | jq '{code, verdict, has_job: (.job != null)}'
+# 기대: {"code":"OK-...", "verdict":"PASS"|"BLOCK", "has_job":false}
+```
+
+```bash
+# 11.3.3 토글 ON 복귀
+echo '{"audit_detail_enabled": true, "attachment_scan_enabled": true}' \
+  > data/system_settings.json
+
+# 11.3.4 동일 요청 (request_id 만 갱신) 호출 → Case C
+curl -sS -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000004002",
+  "author":{"name":"manual","ip":"203.0.113.5"},
+  "post":{"board_id":"qna","title":"toggle on test","body":"본문에는 PII 가 없습니다."},
+  "attachments":[{
+    "attachment_id":"a1","filename":"ok.pdf","size_bytes":1024,
+    "mime_type":"application/pdf","sha256":"$SHA",
+    "fetch_url":"http://127.0.0.1:9999/files/ok.pdf"
+  }],
+  "callback_url":"http://127.0.0.1:9999/cb"
+}
+JSON
+)" | jq '{code, has_job: (.job != null), job_id: (.job.job_id // null)}'
+# 기대: {"code":"ACK-3001","has_job":true,"job_id":"job_..."}
+```
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.3 OFF (Case B) | ☐ | ☐ | ☐ |
+| 11.3 ON (Case C) | ☐ | ☐ | ☐ |
+
+---
+
+### 11.4 deny list 거절 — zip 첨부 [TC-2.1, TC-9.1]
+
+```bash
+SHA=$(printf 'x%.0s' {1..1024} | sha256sum | cut -d' ' -f1)
+curl -sS -o /tmp/resp.json -w "HTTP %{http_code}\n" \
+  -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000002001",
+  "author":{"name":"manual","ip":"203.0.113.5"},
+  "post":{"board_id":"qna","title":"zip test","body":"본문"},
+  "attachments":[{
+    "attachment_id":"a1","filename":"leak.zip","size_bytes":1024,
+    "mime_type":"application/zip","sha256":"$SHA",
+    "fetch_url":"http://127.0.0.1:9999/files/x"
+  }],
+  "callback_url":"http://127.0.0.1:9999/cb"
+}
+JSON
+)"
+jq '{code, user_message}' < /tmp/resp.json
+```
+기대 출력:
+```
+HTTP 415
+{"code":"REQ-4035","user_message":"첨부파일 'leak.zip' 의 형식(format on deny list)은 등록할 수 없습니다."}
+```
+
+`/tmp/cb_log/calls.jsonl` 에 새 항목이 들어가지 **않아야** 합니다 (게이트가
+요청 수신 시점에 차단).
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.4 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.5 정상 PDF + Case C webhook 도착 [TC-1.1]
+
+> **사전 조건**: §11.0 의 mock callback 서버가 9999 포트에서 떠 있어야 함.
+> 실제 PDF 페이로드 fetch 도 같은 mock 으로 받습니다.
+
+```bash
+# 11.5.1 mock 서버에 합성 PDF 를 올려둠 (text-bearing)
+.venv/bin/python -c "
+from tests.fixtures.attachments.create_fixtures import make_text_pdf
+import pathlib
+out = pathlib.Path('/tmp/cb_log/synthetic.pdf'); out.write_bytes(make_text_pdf())
+print(out, 'sha256=', __import__('hashlib').sha256(out.read_bytes()).hexdigest())
+print('size=', out.stat().st_size)
+"
+# 기대 출력에서 'sha256=' 와 'size=' 값을 메모.
+
+# 11.5.2 mock 서버를 정적 파일 서버로 재기동 — 또는 별도 포트로 띄움
+# 가장 간단: §11.0 의 BaseHTTPRequestHandler 에 do_GET 핸들러 추가하거나
+# 별도 'python3 -m http.server -d /tmp/cb_log 9998' 를 새 터미널에 띄움
+( cd /tmp/cb_log && python3 -m http.server 9998 >/dev/null 2>&1 ) &
+GET_PID=$!
+
+# 11.5.3 detect 호출 — fetch_url 은 9998, callback_url 은 9999
+SHA=<위 단계의 sha256 값>
+SIZE=<위 단계의 size 값>
+curl -sS -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000005001",
+  "author":{"name":"manual","ip":"203.0.113.5"},
+  "post":{"board_id":"qna","title":"pdf case-c","body":"본문에는 PII 가 없습니다."},
+  "attachments":[{
+    "attachment_id":"a1","filename":"synthetic.pdf","size_bytes":$SIZE,
+    "mime_type":"application/pdf","sha256":"$SHA",
+    "fetch_url":"http://127.0.0.1:9998/synthetic.pdf"
+  }],
+  "callback_url":"http://127.0.0.1:9999/cb"
+}
+JSON
+)" | jq .
+
+# 11.5.4 webhook 도착 확인 (~수 초 안에)
+sleep 5
+tail -n 5 /tmp/cb_log/calls.jsonl | jq '{method, path}'
+# 기대: 마지막 항목이 method=POST, path=/cb
+```
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.5 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.6 PII 포함 PDF → webhook BLOCK + DELETE 호출 [TC-7.1, TC-7.8, TC-7.9]
+
+§11.5 의 mock 환경을 그대로 사용합니다. 합성 PII 가 포함된 PDF 를 새로
+만들어 올린 뒤 detect 호출.
+
+```bash
+.venv/bin/python -c "
+from tests.fixtures.attachments.create_fixtures import _build_pdf
+from tests.fixtures.synthetic_pii_generator import SyntheticPIIGenerator
+g = SyntheticPIIGenerator(seed=11_006)
+data = _build_pdf([f'합성 RRN: {g.gen_rrn()} 끝.'])
+import pathlib, hashlib
+out = pathlib.Path('/tmp/cb_log/with_rrn.pdf'); out.write_bytes(data)
+print('sha256=', hashlib.sha256(data).hexdigest())
+print('size=', len(data))
+"
+# 위 sha256/size 를 메모 후 detect 호출 (filename=with_rrn.pdf,
+# fetch_url=http://127.0.0.1:9998/with_rrn.pdf) — 11.5.3 과 같은 형식.
+
+# 1) 결과 webhook 도착 확인
+sleep 8
+jq 'select(.method=="POST")' < /tmp/cb_log/calls.jsonl | tail -n 1 \
+  | jq '{verdict: (.body | fromjson | .verdict), code: (.body | fromjson | .code)}'
+# 기대: {"verdict":"BLOCK","code":"BLOCK-2010"}
+
+# 2) DELETE 후속 호출 확인 (Phase D)
+jq 'select(.method=="DELETE")' < /tmp/cb_log/calls.jsonl | tail -n 1 \
+  | jq '{path,body,sig:(.headers["X-Signature"][:16] + "...")}'
+# 기대: path=/cb, body 에 request_id/job_id/code 포함, X-Signature 64자 hex.
+
+# 3) HMAC 서명 재계산으로 무결성 확인 (선택)
+.venv/bin/python - <<'PY'
+import json, hashlib, hmac, os, pathlib
+secret = os.environ.get("WEBHOOK_SIGNING_SECRET","").encode()
+last = [json.loads(l) for l in pathlib.Path("/tmp/cb_log/calls.jsonl").read_text().splitlines()
+        if json.loads(l)["method"]=="DELETE"][-1]
+ts, n = last["headers"]["X-Timestamp"], last["headers"]["X-Nonce"]
+body = last["body"].encode()
+canonical = f"{ts}\n{n}\nDELETE\n/cb\n{hashlib.sha256(body).hexdigest()}"
+expected = hmac.new(secret, canonical.encode(), hashlib.sha256).hexdigest()
+print("server-sig:", last["headers"]["X-Signature"])
+print("recomputed:", expected, "match=", expected==last["headers"]["X-Signature"])
+PY
+```
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.6 BLOCK webhook | ☐ | ☐ | ☐ |
+| 11.6 DELETE 도착 | ☐ | ☐ | ☐ |
+| 11.6 HMAC 서명 검증 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.7 callback_delete 로깅 — correlation IDs 보임 [Phase D 로깅]
+
+uvicorn 콘솔 로그(또는 운영 환경 로그 어그리게이터)에서 §11.6 의 BLOCK
+요청 직후 다음 패턴이 차례로 보여야 합니다:
+
+```
+INFO callback_delete: scheduling DELETE for blocked job job_xxx (request=..., code=BLOCK-2010)
+INFO callback_delete: dispatching DELETE for blocked post <request_id>/<job_id>
+INFO callback_delete: delivered for <request_id>/<job_id> on attempt 1 (status 204)
+```
+
+`extra={request_id, job_id, attempt, status, callback_url, ...}` 가 담긴
+구조화 로그가 보이는지 확인합니다 (운영에서는 JSON 핸들러가 키-값을 분리
+출력합니다).
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.7 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.8 예외 IP audit-only — verdict PASS, audit 에 entity_type 보존 [TC-5.1, TC-5.3, TC-7.3]
+
+```bash
+# 11.8.1 예외 IP 등록 + 캐시 reload (서버 재기동 또는 admin reload)
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME <<'SQL'
+INSERT INTO pii.exception_ips (cidr, label, enabled)
+VALUES ('203.0.113.42/32', 'manual-runbook', true)
+ON CONFLICT (cidr) DO UPDATE SET enabled = true, label = excluded.label;
+SQL
+# lifespan 시점에 cache 를 1회 reload 하므로 변경 반영을 위해 서버 재기동
+kill $SERVER_PID; wait $SERVER_PID 2>/dev/null
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000 &
+SERVER_PID=$!
+sleep 2
+
+# 11.8.2 RRN 본문 + 예외 IP 작성자
+.venv/bin/python -c "
+from tests.fixtures.synthetic_pii_generator import SyntheticPIIGenerator
+print(SyntheticPIIGenerator(seed=11_008).gen_rrn())
+" | tee /tmp/rrn.txt
+RRN=$(cat /tmp/rrn.txt)
+curl -sS -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000005108",
+  "author":{"name":"manual","ip":"203.0.113.42"},
+  "post":{"board_id":"qna","title":"audit-only","body":"본문 합성 RRN: $RRN"}
+}
+JSON
+)" | jq '{verdict, code, user_message}'
+# 기대: {"verdict":"PASS","code":"OK-0000","user_message":"게시 가능합니다."}
+
+# 11.8.3 audit_events 에 검출 entity_type 가 남았는지 확인
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c \
+  "SELECT response_code, detected_entity_types FROM pii.audit_events
+    WHERE request_id::text='00000000-0000-0000-0000-000000005108'
+    ORDER BY occurred_at DESC LIMIT 1;"
+# 기대: response_code=OK-0000, detected_entity_types LIKE '%KR_RRN%'
+```
+
+`/tmp/cb_log/calls.jsonl` 에 DELETE 항목이 추가되지 **않아야** 합니다.
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.8 verdict PASS | ☐ | ☐ | ☐ |
+| 11.8 audit 에 entity_type 기록 | ☐ | ☐ | ☐ |
+| 11.8 DELETE 미호출 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.9 한국어 라벨 — 일반 IP BLOCK 응답 [TC-5.2, TC-6.1]
+
+§11.8.2 의 동일 요청을 일반 IP (`203.0.113.5`) 로 다시 호출:
+
+```bash
+curl -sS -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000005109",
+  "author":{"name":"manual","ip":"203.0.113.5"},
+  "post":{"board_id":"qna","title":"label test","body":"본문 합성 RRN: $RRN"}
+}
+JSON
+)" | jq '{verdict, code, user_message}'
+```
+기대 출력 (요지):
+- `verdict: "BLOCK"`
+- `user_message` 끝에 `(검출된 항목: 주민등록번호)` 포함
+- `KR_RRN` 같은 raw 코드는 미노출
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.9 verdict BLOCK | ☐ | ☐ | ☐ |
+| 11.9 한국어 라벨 노출 | ☐ | ☐ | ☐ |
+| 11.9 raw 코드 미노출 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.10 Admin blocklist API — CRUD round-trip [TC-8.1~TC-8.6]
+
+> **사전**: 운영 환경 admin API 키 + IP allowlist 통과. 로컬 검증 시
+> `/v1/admin/*` 라우터를 마운트하려면 `.env` 의 `ADMIN_IP_ALLOWLIST` 가
+> 비어있지 않아야 함 (예: `127.0.0.0/8`). `is_admin=true` 인 키 발급은
+> `python -m app.cli apikey issue --name manual --is-admin` 등으로.
+
+```bash
+# 11.10.1 list 21
+gh_admin_get () { ... HMAC 서명 helper, 로컬 환경에 맞게 ... }
+gh_admin_get GET /v1/admin/attachment-blocklist | jq '.rows | length'
+# 기대: 31 (시드)
+
+# 11.10.2 항목 추가
+gh_admin_get POST /v1/admin/attachment-blocklist \
+  '{"extension":"manualtest1","reason":"runbook"}' | jq '.id'
+# 기대: 새 row id 출력
+
+# 11.10.3 첨부 검사 — 새 확장자 차단 확인
+SHA=$(printf 'x%.0s' {1..1024} | sha256sum | cut -d' ' -f1)
+curl -sS -X POST http://127.0.0.1:9000/v1/detect/post \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "request_id":"00000000-0000-0000-0000-000000005110",
+  "author":{"name":"manual","ip":"203.0.113.5"},
+  "post":{"board_id":"qna","title":"blocklist test","body":"본문"},
+  "attachments":[{
+    "attachment_id":"a1","filename":"x.manualtest1","size_bytes":1024,
+    "mime_type":"application/octet-stream","sha256":"$SHA",
+    "fetch_url":"http://127.0.0.1:9999/x"
+  }],
+  "callback_url":"http://127.0.0.1:9999/cb"
+}
+JSON
+)" | jq '{code,status:"check"}'
+# 기대: code=REQ-4035
+
+# 11.10.4 항목 제거 → 같은 요청이 통과해야 함
+gh_admin_get DELETE /v1/admin/attachment-blocklist/$NEW_ID
+# 기대: HTTP 204
+```
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.10 list | ☐ | ☐ | ☐ |
+| 11.10 add | ☐ | ☐ | ☐ |
+| 11.10 added 차단 적용 | ☐ | ☐ | ☐ |
+| 11.10 delete | ☐ | ☐ | ☐ |
+
+---
+
+### 11.11 정리
+
+```bash
+# 1) 예외 IP 행 정리
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c \
+  "DELETE FROM pii.exception_ips WHERE label = 'manual-runbook';"
+
+# 2) 임시 토글 원복
+echo '{"audit_detail_enabled": true, "attachment_scan_enabled": true}' \
+  > data/system_settings.json
+
+# 3) 프로세스 종료
+kill $SERVER_PID 2>/dev/null
+kill $CB_PID 2>/dev/null
+kill $GET_PID 2>/dev/null
+
+# 4) 로그 보존 — 운영 인시던트 분석 용도로 30 일 권장
+mv /tmp/cb_log /tmp/cb_log.$(date +%Y%m%d-%H%M)
+```
+
+| | Pass | Fail | N/A |
+|---|---|---|---|
+| 11.11 | ☐ | ☐ | ☐ |
+
+---
+
+### 11.12 결과 시트 (운영자 작성)
+
+| 검증자 | 일시 | 환경 | 11.1 | 11.2 | 11.3 | 11.4 | 11.5 | 11.6 | 11.7 | 11.8 | 11.9 | 11.10 | 11.11 | 비고 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| | | | | | | | | | | | | | | |
