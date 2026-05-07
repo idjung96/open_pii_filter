@@ -40,6 +40,14 @@
 | TC-1.7 | JPEG 통과 | `image/jpeg` | 202 + `ACK-3001` | 동상 `[photo.jpg]` | 동상 |
 | TC-1.8 | PNG 통과 | `image/png` | 202 + `ACK-3001` | 동상 `[scan.png]` | 동상 |
 
+### OCR 엔진 (PaddleOCR 기본 + VLM 옵트인)
+| ID | 목적 | 자동화 |
+|---|---|---|
+| TC-1.7a | PaddleOCR — 합성 ID 카드 PNG → RRN 텍스트 추출 | `tests/integration/test_paddle_ocr_pipeline.py::test_paddle_runs_on_id_card_sample` |
+| TC-1.7b | PaddleOCR — 합성 명함 PNG → 전화번호 텍스트 추출 | `test_paddle_extracts_phone_from_business_card` |
+| TC-1.7c | PaddleOCR 실패 → VLM 자동 fallback | `test_paddle_failure_falls_back_to_vlm` |
+| TC-1.7d | `OCR_ENGINE=vlm` 설정 시 paddle 우회 | `test_vlm_setting_skips_paddle` |
+
 ### 추출기 단위 검증
 | ID | 목적 | 자동화 |
 |---|---|---|

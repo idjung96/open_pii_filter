@@ -144,8 +144,21 @@ async def test_t5_6_multipage_tiff() -> None:
 
 
 # ── T5.7: VLM 5xx → ExtractionError(SVR-5004) ─────────────────────────────
-async def test_t5_7_vlm_unavailable_maps_to_svr_5004() -> None:
-    """Mock the VLM endpoint to always 503; ocr_image must surface SVR-5004."""
+async def test_t5_7_vlm_unavailable_maps_to_svr_5004(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock the VLM endpoint to always 503; ocr_image must surface SVR-5004.
+
+    Default engine is now paddle, which would happily OCR the synthetic
+    business card on its own — so force ``OCR_ENGINE=vlm`` for this test
+    to keep the failure path exercised.
+    """
+    from app.config import Settings
+
+    base = Settings().model_dump()
+    base["ocr_engine"] = "vlm"
+    monkeypatch.setattr("app.config.get_settings", lambda: Settings(**base))
+    import app.extractors.ocr as ocr_mod
+
+    monkeypatch.setattr(ocr_mod, "get_settings", lambda: Settings(**base), raising=False)
 
     def handler(_req: httpx.Request) -> httpx.Response:
         return httpx.Response(503, text="model down")
@@ -211,12 +224,15 @@ def test_ocrresult_dataclass() -> None:
 
 
 # ── Engine dispatch sanity checks ─────────────────────────────────────────
-def test_paddle_unavailable_falls_back_to_vlm() -> None:
-    """Even with ocr_engine="paddle", missing paddleocr falls through to VLM."""
-    from app.extractors.ocr_paddle import is_paddle_available
+def test_paddle_unavailable_falls_back_to_vlm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When ``is_paddle_available`` reports False the dispatcher must
+    short-circuit straight to the VLM branch — even with
+    ``ocr_engine="paddle"``. Paddle now ships in the runtime image so
+    we monkeypatch the helper to simulate a stripped install."""
+    import app.extractors.ocr_paddle as paddle_mod
 
-    # In this environment paddle is not installed; sanity-check the helper.
-    assert is_paddle_available() is False
+    monkeypatch.setattr(paddle_mod, "is_paddle_available", lambda: False)
+    assert paddle_mod.is_paddle_available() is False
 
 
 async def test_ocr_image_uses_vlm_when_engine_paddle_but_missing(
@@ -240,6 +256,11 @@ async def test_ocr_image_uses_vlm_when_engine_paddle_but_missing(
             },
         )(),
     )
+    # Paddle is now bundled by default — patch the gate to simulate a
+    # stripped runtime so the fallback path is the one under test.
+    import app.extractors.ocr_paddle as paddle_mod
+
+    monkeypatch.setattr(paddle_mod, "is_paddle_available", lambda: False)
 
     fake = AsyncMock(return_value=_OCRResult(text="ok", boxes=[], width=10, height=10))
     monkeypatch.setattr(ocr_mod, "vlm_ocr", fake)
@@ -253,8 +274,23 @@ async def test_ocr_image_uses_vlm_when_engine_paddle_but_missing(
     assert fake.await_count == 1
 
 
-async def test_concurrent_ocr_image_requests_dont_share_state() -> None:
-    """Smoke check that multiple concurrent calls don't share a global VLM client."""
+async def test_concurrent_ocr_image_requests_dont_share_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Smoke check that multiple concurrent calls don't share a global VLM client.
+
+    Paddle is the new default engine, but this regression specifically
+    exercises the VLM client-pool path — pin ``OCR_ENGINE=vlm`` so the
+    httpx mock is the one being hit.
+    """
+    from app.config import Settings
+
+    base = Settings().model_dump()
+    base["ocr_engine"] = "vlm"
+    monkeypatch.setattr("app.config.get_settings", lambda: Settings(**base))
+    import app.extractors.ocr as ocr_mod
+
+    monkeypatch.setattr(ocr_mod, "get_settings", lambda: Settings(**base), raising=False)
 
     # Mock the network so we can fire 5 in parallel.
     def handler(_req: httpx.Request) -> httpx.Response:

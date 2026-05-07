@@ -53,11 +53,13 @@ class Settings(BaseSettings):
     attachment_fetch_timeout_seconds: float = 30.0
     webhook_post_timeout_seconds: float = 15.0
 
-    # Phase 5 — OCR
-    # Engine selector. "vlm" routes to OpenAI-compatible chat completions
-    # against the internal Qwen-VL endpoint; "paddle" uses PaddleOCR (CPU)
-    # provided the optional [ocr] extras are installed.
-    ocr_engine: Literal["vlm", "paddle"] = "vlm"
+    # Phase 5 / 4b — OCR
+    # Engine selector. "paddle" (default) uses PaddleOCR (CPU, in-process,
+    # ships with the runtime). "vlm" routes to OpenAI-compatible chat
+    # completions against the internal Qwen-VL endpoint — kept as an opt-in
+    # for low-quality scans where Paddle accuracy regresses; the dispatcher
+    # falls back to VLM automatically when Paddle errors.
+    ocr_engine: Literal["vlm", "paddle"] = "paddle"
     vlm_endpoint: str = "http://vlm-host:18000/v1"
     vlm_model_id: str = "Qwen/Qwen3.5-27B-GPTQ-Int4"
     vlm_api_key: str = ""
