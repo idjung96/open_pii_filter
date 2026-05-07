@@ -37,7 +37,7 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 |------|------|
 | **텍스트 PII 탐지** | 주민등록번호, 운전면허, 여권, 전화번호, 이메일, 계좌번호 등 |
 | **첨부파일 분석** | PDF, DOCX, XLSX, PPTX, 텍스트(.txt/.md), 이미지 (비동기 처리 + 웹훅) |
-| **이미지 OCR** | vLLM Qwen3.5-27B-GPTQ-Int4 (기본) / PaddleOCR (에어갭 대안) |
+| **이미지 OCR** | PaddleOCR (CPU, 기본) / vLLM Qwen3.5-27B-GPTQ-Int4 (저품질 스캔용 옵트인) |
 | **HMAC 인증** | API 키 + HMAC-SHA256 서명 + ±5분 타임스탬프 창 |
 | **감사 로그** | append-only (DB 트리거), 1년 보존 |
 | **AES-256-GCM** | 키 로테이션 지원, 버전 envelope |
@@ -131,7 +131,7 @@ MIME별 추출기 분기 (extractors/dispatcher.py)
   ├─ PPTX       → python-pptx (슬라이드 + 발표자 노트)
   ├─ 텍스트     → text/plain 또는 text/markdown 디코드
   ├─ HWP/HWPX   → 예외 IP 우회 분기에서만 도달 (일반 IP 는 단계 13 에서 차단)
-  └─ Image      → vLLM Qwen3.5-27B-GPTQ-Int4 OCR
+  └─ Image      → PaddleOCR PP-OCRv5 (CPU 기본) — 실패 시 vLLM Qwen3.5-27B-GPTQ-Int4 fallback
         ↓
 추출 텍스트 → 본문과 동일한 AnalyzerEngine 으로 PII 분석
         ↓
@@ -302,7 +302,7 @@ docs/              # 설치·운영·연동·아키텍처 문서
 - **DB**: PostgreSQL 16 + asyncpg + SQLAlchemy 2.x + Alembic
 - **Cache**: Redis 7 (GCRA rate limiting, nonce dedup, idempotency)
 - **PII 엔진**: Microsoft Presidio (analyzer) + spaCy `ko_core_news_lg` (토크나이저)
-- **OCR**: vLLM Qwen3.5-27B-GPTQ-Int4 (기본, OpenAI-호환 chat completions) / PaddleOCR (대안)
+- **OCR**: PaddleOCR PP-OCRv5 (한국어, CPU, 기본) / vLLM Qwen3.5-27B-GPTQ-Int4 (`OCR_ENGINE=vlm` 으로 전환 — 저품질 스캔/회전/표 레이아웃 회귀 시)
 - **이미지**: Pillow (이미지 처리), pypdfium2 (스캔 PDF 렌더링)
 - **보안**: HMAC-SHA256, AES-256-GCM, ClamAV, append-only 감사로그
 - **관측성**: prometheus-client, structlog, PIIScrubFilter
