@@ -1,7 +1,139 @@
-# PII Detection & Masking API
+# Open PII Filter — PII Detection & Pre-publication Gate API
 
-기관 대표홈페이지 게시판용 개인정보 탐지·마스킹 REST API.  
-본문 및 첨부파일(PDF/DOCX/XLSX/PPTX/텍스트/이미지)의 PII를 검사하고, 이미지는 마스킹 버전을 제공합니다.
+기관 공공 홈페이지 / 게시판 등 **외부에 공개되는 텍스트·첨부파일이 게시되기 전에 개인정보(PII)를 식별·차단**하기 위한 한국어 중심의 self-hosted REST API.
+
+---
+
+## 프로젝트 목적
+
+공공기관·기업 홈페이지의 자유 게시판·민원 창구·문의 게시판에는 작성자가 의도치 않게 **주민등록번호·연락처·계좌번호·신분증 사진** 등을 그대로 올리는 사고가 반복됩니다. 한 번 외부에 노출된 개인정보는 색인·캐싱·스크래핑을 통해 사실상 회수 불가능하며, 운영 기관은 개인정보 보호법 위반 책임을 집니다.
+
+본 프로젝트는 그 사고 자체를 **게시 시점 이전에 차단**하기 위한 게이트웨이입니다.
+
+- 게시 직전 호출되는 **단일 REST 엔드포인트** (`POST /v1/detect/post`)
+- **자체 호스팅** — 외부 클라우드 LLM 으로 PII 가 송출되는 경로 없음 (사내 vLLM 도 옵트인)
+- **한국어 PII 에 특화** — 주민등록번호 / 운전면허번호 / 여권번호 / 외국인등록번호 / 사업자등록번호 / 한국 전화번호 (지역번호 없는 표기 포함) 의 체크섬·컨텍스트 기반 인식
+- **첨부파일까지 동일 게이트** — PDF·DOCX·XLSX·PPTX·텍스트·이미지 본문을 추출/OCR 후 같은 정책으로 검사
+
+---
+
+## 프로젝트 설명
+
+### 처리 모델 — 단일 엔드포인트 + 비동기 첨부
+
+- **Case A** — 본문에 BLOCK 급 PII → 즉시 HTTP 200 BLOCK, 첨부 검사 생략
+- **Case B** — 본문 PASS + 첨부 없음 → 즉시 HTTP 200 PASS
+- **Case C** — 본문 PASS + 첨부 있음 → HTTP 202 ACK + 워커가 `fetch_url` 로 받아 OCR/파싱 후 `callback_url` 로 webhook 회신
+
+### 탐지 엔진 스택
+
+- **Microsoft Presidio** 위에 한국어 커스텀 인식기 (`app/core/recognizers/`) — 정규식 + 체크섬 + 컨텍스트 부스트
+- **spaCy `ko_core_news_lg`** 토크나이저
+- **3-tier strictness** (low / medium / high) — 게시판 성격에 따라 클라이언트가 임계값 선택
+
+### 첨부 텍스트 추출 — 형식별 분기
+
+| 형식 | 라이브러리 | OCR? |
+|------|-----------|------|
+| PDF (텍스트 레이어) | pypdfium2 + pdfplumber | ❌ |
+| PDF (스캔본) | pypdfium2 → PaddleOCR | ✅ |
+| DOCX / XLSX / PPTX | python-docx / openpyxl / python-pptx | ❌ |
+| HWPX | lxml (XML 직접 파싱) | ❌ |
+| 이미지 | PaddleOCR (CPU 기본) → vLLM Qwen3.5-VL 폴백 | ✅ |
+| TXT / MD | UTF-8 → CP949 폴백 | ❌ |
+
+HWP·HWPX·ZIP·OLE 레거시 (`.doc`/`.xls`/`.ppt`) 는 `attachment_blocklist` deny-list 가 일괄 거절 (`REQ-4035`).
+
+### 보안·운영 특성
+
+- HMAC-SHA256 + API Key + ±5분 timestamp + nonce 재사용 차단
+- IP allowlist (외부 `:443` / 관리자 `:8443` 신뢰영역 분리)
+- append-only `audit_events` (BEFORE UPDATE/DELETE 트리거, 1년 보존)
+- AES-256-GCM envelope 암호화 헬퍼 (키 로테이션 대응)
+- 평문 PII 는 **로그·메트릭·트레이스·DB 어디에도 저장되지 않음**
+- Prometheus 메트릭 + `/admin/*` 운영자 대시보드 (검사 토글, 검사 테스트, 차단 이력, 패턴 관리)
+- **AGPL / SSPL** 라이선스 라이브러리 직접 의존 금지 (PyMuPDF / pyhwp 차단)
+
+상세 — [`docs/system_architecture.md`](docs/system_architecture.md) · [`docs/data_flow.md`](docs/data_flow.md) · [`docs/api_integration.md`](docs/api_integration.md)
+
+---
+
+## 소프트웨어 구성 및 역할
+
+운영 환경에서 동작하는 각 소프트웨어/라이브러리의 역할을 한 번에 정리한 표입니다. 전체 목록·라이선스·핀 버전은 관리자 대시보드 `/admin/dependencies` 에서 항상 최신 상태를 확인할 수 있습니다.
+
+### 애플리케이션 런타임
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **FastAPI** (+ Starlette / Uvicorn) | MIT / BSD-3 | REST API 프레임워크 + ASGI 서버. `POST /v1/detect/post` 등 모든 엔드포인트 호스팅 |
+| **Pydantic v2** + **pydantic-settings** | MIT | 요청/응답 스키마 검증, `.env` 기반 Settings |
+| **python-multipart** | Apache-2.0 | `multipart/form-data` 파싱 — `/admin/test` 첨부 업로드 |
+| **Jinja2** | BSD-3 | 관리자 대시보드 (`/admin/*`) 템플릿 렌더링 |
+
+### PII 탐지 엔진
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **Microsoft Presidio (analyzer)** | MIT | PII 분석 프레임워크 — 커스텀 인식기 등록/실행, decision-process 노출 |
+| **spaCy** + `ko_core_news_lg` | MIT / CC BY-SA 4.0 | 한국어 토크나이저 (Phase 9E 이후 NER 미사용) |
+| **커스텀 KR 인식기** | GPL-3.0 (본 저장소) | 주민등록번호·운전면허·여권·외국인등록·사업자번호·KR_PHONE (지역번호 없는 표기 포함) 정규식 + 체크섬 + 컨텍스트 부스트 |
+
+### 파일 추출 / OCR
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **pypdfium2** | Apache-2.0 / BSD-3 | PDF 페이지 렌더 (스캔본 OCR 입력 생성) |
+| **pdfplumber** | MIT | PDF 텍스트 레이어 추출 (스캔본은 자동으로 OCR 경로로 라우팅) |
+| **python-docx** | MIT | DOCX 단락/표 텍스트 추출 |
+| **openpyxl** | MIT | XLSX 셀 텍스트 추출 (Phase 4b) |
+| **python-pptx** | MIT | PPTX 슬라이드/표 텍스트 추출 (Phase 4b) |
+| **lxml** | BSD-3 | HWPX XML 직접 파싱 (별도 HWP 라이브러리 미사용) |
+| **PaddleOCR PP-OCRv5 (한국어, CPU)** | Apache-2.0 | 이미지 OCR **기본 엔진** — in-process, 외부 송출 없음 |
+| **vLLM + Qwen3.5-VL** | Apache-2.0 | OCR 폴백 / 옵트인 (`OCR_ENGINE=vlm`) — 사내 GPU 서버, 외부 클라우드 호출 없음 |
+| **Pillow** | MIT-CMU | 이미지 로딩 / EXIF 회전 / 다운스케일 |
+
+### 저장소 / 메시징
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **PostgreSQL 16** | PostgreSQL | 주 데이터베이스 — API 키 / 감사 이벤트 / 정책 / 작업 상태 / 피드백. pgcrypto AES 사용 |
+| **SQLAlchemy 2.x (async)** + **asyncpg** | MIT / Apache-2.0 | 런타임 ORM (asyncio) |
+| **psycopg2-binary** | LGPL-3.0 | Alembic 마이그레이션 전용 동기 드라이버 |
+| **Alembic** | MIT | DB 스키마 마이그레이션 |
+| **Redis 7** + **redis-py** | RSALv2/SSPL (서버) · MIT (클라이언트) | GCRA 토큰 버킷 rate-limit · HMAC nonce 중복 캐시 (사내 자체 호스팅) |
+
+### 보안 / 통신
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **httpx** | BSD-3 | 비동기 HTTP 클라이언트 — 첨부 fetch, webhook 송신, ASGI 인-프로세스 테스트 |
+| **clamd** + **ClamAV 1.3** | LGPL-3.0 · GPL-2.0 | 첨부 INSTREAM 악성코드 스캔 (소프트 실패 허용) |
+| **cryptography** | Apache-2.0 / BSD | AES-256-GCM envelope 암호화 (`app/security/encryption.py`, 키 로테이션 대응) |
+| **Nginx** | BSD-2 | TLS 종단 · 외부 `:443` / 관리자 `:8443` 신뢰영역 분리 |
+
+### 운영 / 관측
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **prometheus-client** | Apache-2.0 | `/v1/admin/metrics` 노출 — `detect_total`, `block_total`, `ocr_duration_seconds`, `attachment_size_bytes` |
+| **Typer** | MIT | API 키 / 패턴 관리 CLI (`python -m app.cli`) |
+| **Docker / Docker Compose** | Apache-2.0 | 컨테이너 빌드 · 로컬 의존성 묶음 |
+
+### 개발 / CI 도구
+
+| 소프트웨어 | 라이선스 | 역할 |
+|-----------|---------|------|
+| **Ruff** | MIT | 린트 + 포매터 (CI 게이트) |
+| **mypy (strict)** | MIT | 타입 체크 (CI 게이트) |
+| **bandit** | Apache-2.0 | 보안 정적 분석 |
+| **pip-audit** | Apache-2.0 | 의존성 취약점 스캔 |
+| **pytest** + **pytest-asyncio** | MIT / Apache-2.0 | 단위 / 통합 테스트 러너 — 총 328 케이스 ([`docs/test_catalog.md`](docs/test_catalog.md)) |
+| **Locust** | MIT | 부하 테스트 (`tests/load/`) |
+| **reportlab** (테스트 전용) | BSD-3 | 합성 PDF / 스캔 PDF 픽스처 생성 |
+| **pre-commit** | MIT | pre-commit 훅 관리 |
+
+> **AGPL / SSPL 라이브러리 직접 의존 금지** — PyMuPDF (AGPL), pyhwp (AGPL) 등 외부 노출 API 에서 강한 copyleft 전파를 일으키는 라이브러리는 차단. MongoDB / Redis 서버 자체의 SSPL 은 외부 데몬으로 사용하는 한 무관.
 
 ---
 
@@ -21,13 +153,31 @@ curl http://localhost:8000/readyz   # {"status":"ok","db":"ok","redis":"ok"}
 ### 로컬 개발 (uv)
 
 ```bash
-# 필요: Python 3.12+, uv, PostgreSQL 16, Redis 7, ClamAV 1.3
+# 필요: Python 3.12+, uv, PostgreSQL 16, Redis 7, ClamAV 1.3 (선택)
 cp .env.example .env
 uv sync
 python -m spacy download ko_core_news_lg
 alembic upgrade head
 uvicorn app.main:app --reload   # http://127.0.0.1:8000
 ```
+
+### 사전 조건 점검
+
+`pytest` 를 돌리기 전에 환경이 준비됐는지 한 번에 점검할 수 있습니다.
+
+```bash
+.venv/bin/python scripts/check_test_prereqs.py
+```
+
+점검 항목:
+- Python 3.12 이상
+- 핵심 런타임 패키지 (FastAPI / Presidio / spaCy / PaddleOCR / SQLAlchemy / Redis 등) import 가능 여부
+- spaCy `ko_core_news_lg` 모델 설치 여부
+- PostgreSQL · Redis TCP 도달성 (`.env` 의 `DATABASE_URL` / `REDIS_URL`)
+- ClamAV TCP (선택 — 없으면 ⚠ 경고, 관련 테스트는 자동 skip)
+- VLM 엔드포인트 (선택 — `OCR_ENGINE=paddle` 기본이면 skip)
+
+필수 항목 실패 시 종료 코드 1, 통과 시 0. 자세한 항목 목록은 [`docs/test_catalog.md`](docs/test_catalog.md) §공통 사전 조건 참고.
 
 ---
 
