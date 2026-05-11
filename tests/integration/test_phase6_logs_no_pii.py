@@ -1,10 +1,17 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 6 — verify the log scrubber rewrites every record (T6.1).
+"""Phase 6 — 로그 scrubber 가 모든 record 에 적용되는지 회귀 방지 (T6.1).
 
-We send synthetic PII through the live FastAPI request path and assert
-that no record emitted to caplog contains the original digits / address.
-The same assertion runs for the success path, validation-error path,
-and unhandled-exception path.
+합성 PII (RRN/전화/이메일/주소) 가 들어간 본문을 실제 FastAPI 요청 경로로
+보내고, caplog 가 캡처한 어떤 로그 record 에도 원본 자릿수/문자열이 절대
+포함되지 않아야 한다. 다음 3가지 경로 모두에서 동일하게 검증:
+
+  - 정상 응답 경로 (200/PASS / 200/BLOCK)
+  - pydantic 검증 오류 경로 (REQ-4001/4003/4004 — 400/422)
+  - 미처리 예외 경로 (SVR-5099 — 500)
+
+로그가 PII 평문을 흘리는 회귀가 가장 잡기 어려운 사고이므로, scrubber 가
+record.msg / args / structured fields 모두를 마스킹하는지 정규식 기반으로
+재검색해서 확인.
 """
 
 from __future__ import annotations

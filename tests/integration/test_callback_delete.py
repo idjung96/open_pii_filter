@@ -1,10 +1,18 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4b/D — callback_url DELETE for blocked posts (T4b.14~T4b.16).
+"""Phase 4b/D — callback_url DELETE 회귀 방지 (T4b.14~T4b.16).
 
-Drives `process_attachment_job` directly with synthetic attachments
-and a recorder-style fake `delete_sender` so we can observe whether
-the DELETE was scheduled, what payload it carried, and how it
-responded to retryable / non-retryable status codes.
+첨부 검사 결과가 BLOCK 일 때 워커가 호출자 시스템의 `callback_url` 로
+DELETE 요청을 보내 호출자 측에 "이미 게시되어 있다면 폐기하라" 라고
+알리는 흐름을 검증한다. 세 시나리오:
+
+  - T4b.14: 첨부가 BLOCK → DELETE 가 정확히 한 번, 올바른 메타 (request_id,
+    job_id, code) 와 함께 호출됨
+  - T4b.15: PASS verdict 일 때는 DELETE 가 절대 호출되면 안 됨
+  - T4b.16: 예외 IP audit_only=True 일 때도 DELETE 가 호출되지 않음
+    (per-attachment audit 행은 BLOCK 으로 남지만 사용자 응답은 PASS 강제)
+
+`_process_one_attachment` 를 monkeypatch 해서 실제 fetch/OCR 없이 결과만
+주입 — 워커 로직 (DELETE 결정 부분) 만 핀(pin) 한다.
 """
 
 from __future__ import annotations
@@ -84,10 +92,16 @@ def _stub_block_payload(_url: str, payload: WebhookPayload) -> bool:
     return True
 
 
-# ── T4b.14: BLOCK attachment triggers DELETE on callback_url ───────────────
+# ── T4b.14: BLOCK 첨부 → callback_url DELETE 호출 ────────────────────────
 async def test_block_attachment_triggers_delete(
     temp_job: tuple[str, UUID],
 ) -> None:
+    """첨부 검사 결과가 BLOCK 이면 워커가 callback_url 로 DELETE 1회 전송.
+
+    payload 의 4가지 키 (url, request_id, job_id, code) 모두 정확히 채워져야
+    호출자가 어느 게시물을 폐기해야 하는지 식별 가능. 회귀 시 BLOCK 사고가
+    이미 외부에 노출된 채로 남게 됨.
+    """
     job_id, request_id = temp_job
     engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
@@ -163,10 +177,15 @@ async def test_block_attachment_triggers_delete(
     assert call["code"] == "BLOCK-2010"
 
 
-# ── T4b.15: PASS verdict does NOT call delete_sender ───────────────────────
+# ── T4b.15: PASS verdict → delete_sender 호출 안 됨 ──────────────────────
 async def test_pass_verdict_skips_delete(
     temp_job: tuple[str, UUID],
 ) -> None:
+    """첨부에 PII 가 없어 PASS 일 때는 callback_url DELETE 가 호출되면 안 된다.
+
+    호출자가 정상 게시물을 폐기해 버리는 사고 방지. asyncio.Event 가 set
+    되지 않은 채 테스트가 끝나야 한다.
+    """
     job_id, request_id = temp_job
     engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)
@@ -219,10 +238,17 @@ async def test_pass_verdict_skips_delete(
     assert not delete_called.is_set()
 
 
-# ── T4b.16: audit_only=True skips DELETE even with BLOCK detections ────────
+# ── T4b.16: audit_only=True → BLOCK 이라도 DELETE 호출 안 됨 ─────────────
 async def test_audit_only_skips_delete(
     temp_job: tuple[str, UUID],
 ) -> None:
+    """예외 IP (audit_only) 경로에서는 BLOCK 검출이 있어도 사용자 응답은 PASS,
+    callback DELETE 도 호출되지 않아야 한다.
+
+    예외 IP 는 신뢰된 게시자 — audit 행으로 검출 메타데이터는 기록하되
+    실제 차단/폐기 동작은 일으키지 않는 것이 정책. 회귀 시 신뢰된 게시자의
+    정상 게시물이 폐기되는 사고로 직결.
+    """
     job_id, request_id = temp_job
     engine = create_async_engine(get_settings().database_url, poolclass=NullPool, future=True)
     sm = async_sessionmaker(engine, expire_on_commit=False)

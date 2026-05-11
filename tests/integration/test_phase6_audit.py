@@ -1,10 +1,17 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 6 — audit_events insert + append-only triggers + admin API.
+"""Phase 6 — `audit_events` 삽입 + append-only 트리거 + 운영자 API 회귀 방지.
 
-Covers T6.4 (audit row recorded per request), T6.5 (UPDATE/DELETE
-rejected), T6.5b (cleanup worker can DELETE under bypass), and the
-admin-endpoint extras: is_admin gate, IP allowlist, conditional mount,
-pagination.
+감사 로그 인프라의 핵심 보장을 한 모듈에서 검증한다:
+
+  - T6.4 — 모든 요청마다 audit_events row 가 정확히 1건 기록됨
+  - T6.5 — BEFORE UPDATE/DELETE 트리거가 통상 INSERT 외 변경을 거절
+  - T6.5b — 단, `SET LOCAL app.bypass_audit_lock = 'on'` 가 켜진 cleanup
+    워커는 1년 retention GC 를 위해 DELETE 가능
+  - 운영자 API 게이트 — `is_admin` 체크 + IP allowlist + 빈 allowlist 시
+    라우터 비마운트 + 페이지네이션 동작 확인
+
+audit 행을 사후 변조하지 못하게 막는 트리거가 핵심 컴플라이언스 가드 —
+회귀 시 ISMS-P 심사 통과 불가.
 """
 
 from __future__ import annotations

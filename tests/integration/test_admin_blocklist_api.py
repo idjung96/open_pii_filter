@@ -1,13 +1,17 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4b — admin CRUD for `pii.attachment_blocklist` (T4b.1).
+"""Phase 4b — `attachment_blocklist` 운영자 CRUD 회귀 방지 (T4b.1).
 
-Verifies:
-  - GET    /v1/admin/attachment-blocklist (admin-only, returns seeded rows)
-  - POST   /v1/admin/attachment-blocklist (round-trips through the cache)
-  - DELETE /v1/admin/attachment-blocklist/{id} (404 on missing, 204 on
-    success, removes from cache)
-  - non-admin caller → 403 REQ-4015
-  - empty admin_ip_allowlist → router not mounted (404)
+운영자가 첨부 deny-list 를 실시간으로 추가/삭제할 수 있는 REST API 의
+모든 경로를 검증:
+
+  - `GET /v1/admin/attachment-blocklist` — admin 전용, seed 된 행 반환
+    (`hwp`, `hwpx`, `zip`, `rar` 등이 포함되어야 함)
+  - `POST /v1/admin/attachment-blocklist` — 새 행 추가 + in-memory 캐시 즉시
+    반영 (재시작 없이 운영 가능)
+  - `DELETE /v1/admin/attachment-blocklist/{id}` — 미존재 → 404, 성공 → 204
+    + 캐시에서 즉시 제거
+  - 비-admin 호출 → 403 REQ-4015 (권한 분리)
+  - `admin_ip_allowlist` 가 비어 있으면 라우터 비마운트 → 404 (노출 표면 최소화)
 """
 
 from __future__ import annotations

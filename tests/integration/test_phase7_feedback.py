@@ -1,9 +1,17 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 7 — POST /v1/feedback (T7.4).
+"""Phase 7 — `POST /v1/feedback` 회귀 방지 (T7.4).
 
-Covers:
-  - 202 ACK-3010 + feedback row inserted + audit row recorded
-  - reporter_email is hashed (raw select shows hash, not plaintext)
+사용자가 오탐/미탐 신고를 보내는 엔드포인트가 다음을 만족하는지 확인:
+
+  - 응답 202 + `ACK-3010` + `feedback_id` 반환
+  - `pii.pii_feedback` 에 row 삽입 — reporter_email 은 SHA-256 해시 (64자)
+    로만 저장되며 평문은 reporter_hash / reason 어디에도 등장하지 않음
+  - 같은 호출이 audit_events 에도 기록됨 (`/v1/feedback` 경로 + ACK-3010)
+  - 이메일 미제출 시 발신자 IP 의 해시로 fallback (익명 신고 지원)
+  - 잘못된 이메일 형식은 400/422 로 거절
+
+reporter_email 의 평문 저장 회귀를 1차 가드 — 평문 보관 시 개인정보 보호
+법 위반 직결.
 """
 
 from __future__ import annotations

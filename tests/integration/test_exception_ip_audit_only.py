@@ -1,11 +1,16 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4b/C — exception-IP audit-only mode (T4b.11~T4b.13).
+"""Phase 4b/C — 예외 IP audit-only 모드 회귀 방지 (T4b.11~T4b.13).
 
-The author's IP is added to `pii.exception_ips` for the duration of
-each test; the analyzer runs and produces real detections, but the
-caller receives PASS / OK-0000 regardless. Audit metadata captured
-via `_stash_audit` retains the actual entity_types, which is the
-safety net for trusted publishers.
+`pii.exception_ips` CIDR 에 매칭되는 발신 IP 의 요청은 다음과 같이 처리:
+
+  - 분석기는 **실제로 돌아간다** — 검출 결과 (entity_type / score / span)
+    가 모두 산출됨
+  - 그러나 사용자에게는 PASS / OK-0000 으로 응답 (BLOCK 강제 무력화)
+  - audit_events 행에는 실제 검출 메타데이터가 그대로 남아 사후 모니터링
+    / 컴플라이언스 추적이 가능
+
+신뢰된 게시자 (예: 운영팀 게시판 봇) 가 자기 본문에 RRN 을 포함해도
+서비스가 멈추지 않게 하면서도, audit 추적은 잃지 않는 안전망.
 """
 
 from __future__ import annotations
@@ -63,11 +68,17 @@ def _payload(*, ip: str, body: str) -> dict[str, object]:
     }
 
 
-# ── T4b.11: exception-IP body BLOCK becomes user-facing PASS ───────────────
+# ── T4b.11: 예외 IP + 본문 RRN → 사용자 응답은 PASS 강제 ────────────────
 async def test_exception_ip_with_rrn_body_returns_pass(
     client: AsyncClient,
     exception_ip_loaded: None,
 ) -> None:
+    """예외 IP 가 RRN 을 포함한 본문을 보내도 사용자에게는 PASS / OK-0000.
+
+    검출이 실제로 일어났음에도 verdict 가 PASS 로 강제되고, 사용자 메시지
+    에 "검출된 항목" 접미사가 절대 붙지 않아야 한다 (그러면 사용자에게
+    PII 가 있다고 안내하는 셈이라 audit_only 정책과 모순).
+    """
     gen = SyntheticPIIGenerator(seed=4011)
     rrn = gen.gen_rrn()
     body = f"본문에 합성 주민등록번호 {rrn} 가 포함되어 있습니다."
@@ -82,10 +93,16 @@ async def test_exception_ip_with_rrn_body_returns_pass(
     assert "검출된 항목" not in payload["user_message"]
 
 
-# ── T4b.12: non-exception IP still BLOCKs and surfaces the KR label ────────
+# ── T4b.12: 일반 IP + 본문 RRN → BLOCK + 한글 라벨 안내 ──────────────────
 async def test_non_exception_ip_with_rrn_body_returns_block_with_label(
     client: AsyncClient,
 ) -> None:
+    """예외 IP 가 아닌 발신자에게는 정상 BLOCK + 한글 라벨 응답.
+
+    예외 IP 정책이 너무 광범위하게 적용되어 일반 게시자도 PASS 로 처리되는
+    회귀를 방지. 또한 사용자 메시지에 한글 라벨 (`주민등록번호`) 이 등장
+    하면서도 raw entity 코드 (`KR_RRN`) 는 새지 않는지 함께 확인.
+    """
     gen = SyntheticPIIGenerator(seed=4012)
     rrn = gen.gen_rrn()
     body = f"본문에 합성 주민등록번호 {rrn} 가 포함되어 있습니다."

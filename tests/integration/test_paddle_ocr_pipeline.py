@@ -1,20 +1,18 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4b — PaddleOCR is the default engine.
+"""Phase 4b — PaddleOCR 가 기본 OCR 엔진임을 회귀 검증.
 
-The suite drives the existing image fixtures (`make_id_card_png`,
-`make_business_card_png`) through the dispatcher with `OCR_ENGINE=paddle`
-to confirm:
+기존 이미지 fixture (`make_id_card_png`, `make_business_card_png`) 를
+dispatcher 로 흘려 `OCR_ENGINE=paddle` 시 다음을 모두 확인:
 
-- Paddle returns text + boxes when the engine is reachable
-- The synthetic RRN / phone number embedded in the fixture survives
-  the round-trip (i.e., the analyser sees PII it can recognise)
-- The dispatcher's paddle → vlm fallback fires when paddle raises
-  (regression for the auto-recovery path)
-- Switching `Settings.ocr_engine="vlm"` skips the paddle code path
-  entirely
+- 엔진 도달 가능 시 Paddle 이 text + box 를 반환
+- fixture 에 심어둔 합성 RRN / 전화번호가 OCR 라운드트립 후에도 살아남아
+  분석기가 PII 로 인식 가능 (end-to-end 신뢰성)
+- Paddle 이 예외를 던지면 dispatcher 가 vlm 로 자동 폴백 (auto-recovery
+  경로 회귀 방지)
+- `Settings.ocr_engine="vlm"` 으로 전환하면 paddle 경로가 전혀 호출되지 않음
 
-Tests skip cleanly when `paddleocr` is not importable — useful in CI
-images that strip the heavy paddle wheel for footprint reasons.
+`paddleocr` 가 import 불가한 환경 (CPU footprint 축소용 슬림 이미지 등)
+에서는 모듈 단위로 자동 skip 되어 CI 가 깨지지 않는다.
 """
 
 from __future__ import annotations

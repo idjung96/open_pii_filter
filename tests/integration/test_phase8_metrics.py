@@ -1,12 +1,13 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 8 — Prometheus exporter (T8.4).
+"""Phase 8 — Prometheus exporter (`/v1/admin/metrics`) 회귀 방지 (T8.4).
 
-Covers:
-* The default registry exposes the Phase 8 counters/histograms after a
-  detect call.
-* ``GET /v1/admin/metrics`` is gated by ``require_admin`` (admin key +
-  IP allowlist).
-* The exposition response uses the Prometheus text content type.
+운영 모니터링의 단일 진입점인 metrics 엔드포인트를 다음 3가지 측면에서
+검증한다:
+
+* detect 호출 후 카운터/히스토그램이 기본 레지스트리에 실제로 노출된다
+* 엔드포인트는 admin 게이트 (`require_admin`: admin 키 + IP allowlist)
+  를 통과한 호출만 허용한다 (비-admin 키는 403 REQ-4015)
+* 응답 content-type 이 Prometheus exposition text 형식 (`text/plain`)
 """
 
 from __future__ import annotations
@@ -109,13 +110,21 @@ def _signed_headers(*, key_id: str, secret: str, path: str, body: bytes = b"") -
     }
 
 
-# ── T8.4: counters increment on detect calls ──────────────────────────────
+# ── T8.4: detect 호출 후 counter 가 노출되는지 확인 ───────────────────────
 async def test_t8_4_metrics_counters_present_after_detect(
     monkeypatch: pytest.MonkeyPatch,
     admin_key: tuple[str, str],
 ) -> None:
-    """A successful detect call followed by GET /v1/admin/metrics returns
-    Prometheus exposition text containing the Phase 8 counter names."""
+    """detect 호출 1회 후 `/v1/admin/metrics` 가 Phase 8 카운터 이름들을 노출.
+
+    검증 카운터/히스토그램:
+      - `process_cpu_seconds_total` (prometheus_client 기본)
+      - `http_requests_total`, `http_request_duration_seconds`
+      - `pii_detections_total`, `extraction_jobs_total`
+      - `feedback_total`, `rate_limit_rejections_total`
+
+    이름이 하나라도 빠지면 운영 Grafana 패널이 깨지므로 회귀 즉시 적발.
+    """
     from httpx import ASGITransport, AsyncClient
 
     from app.security.auth import require_auth
@@ -172,12 +181,17 @@ async def test_t8_4_metrics_counters_present_after_detect(
     assert "rate_limit_rejections_total" in body_text
 
 
-# ── Gate: non-admin caller → 403 ──────────────────────────────────────────
+# ── 게이트: 비-admin 키 → 403 ────────────────────────────────────────────
 async def test_metrics_endpoint_rejects_non_admin(
     monkeypatch: pytest.MonkeyPatch,
     db_session: AsyncSession,
 ) -> None:
-    """Non-admin API key against /v1/admin/metrics → 403 REQ-4015."""
+    """비-admin 키로 `/v1/admin/metrics` 호출 시 403 REQ-4015.
+
+    metrics 노출은 운영자 전용 — 일반 게시판 API 키가 우연히/악의적으로
+    같은 엔드포인트에 접근하면 즉시 거절되어야 한다. IP allowlist 통과 후
+    `is_admin` 컬럼만 다른 키로 검증해서 권한 분리의 게이트 회귀를 잡는다.
+    """
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool

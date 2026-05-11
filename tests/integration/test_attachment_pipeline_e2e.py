@@ -1,18 +1,18 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4b/E — synchronous gate behaviour for every attachment shape.
+"""Phase 4b/E — 모든 첨부 형식의 동기 게이트 동작 회귀 방지.
 
-The synchronous half of the Case-C pipeline runs entirely in the
-request handler and is exhaustively covered here:
+Case-C 파이프라인의 동기 절반 (요청 핸들러 내부) 을 형식 매트릭스 전체에
+걸쳐 검증한다 — 19건의 케이스로 다음 영역을 빠짐없이 커버:
 
-- Allowed formats (pdf, xlsx, pptx, docx, md, txt, jpeg, png) are
-  accepted with HTTP 202 / ACK-3001 and a `job_id`.
-- Denied formats (zip, rar, 7z, hwp, hwpx, doc, xls, ppt) are rejected
-  with HTTP 415 / REQ-4035.
-- `attachment_scan_enabled` OFF degrades any attached request to
-  Case B (HTTP 200, no job_id).
+- **허용 형식** (pdf / xlsx / pptx / docx / md / txt / jpeg / png) → HTTP 202
+  ACK-3001 + `job_id` 발급 (비동기 워커로 인계)
+- **거절 형식** (zip / rar / 7z / hwp / hwpx / 레거시 doc/xls/ppt) → HTTP 415
+  REQ-4035 (deny-list 매칭)
+- `attachment_scan_enabled` OFF → 어떤 첨부가 있어도 Case B 로 강등
+  (HTTP 200, `job_id` 없음, 첨부 검사 skip)
 
-The async worker side is exercised separately by
-`test_phase4_case_c.py` and `test_callback_delete.py`; this suite
+비동기 워커 쪽 검증 (fetch / OCR / webhook) 은 `test_phase4_case_c.py` 와
+`test_callback_delete.py` 가 별도로 담당. 이 모듈은
 focuses on the gate matrix so a regression there surfaces fast.
 """
 

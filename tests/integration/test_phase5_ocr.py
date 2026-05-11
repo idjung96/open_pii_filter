@@ -1,10 +1,15 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 5 OCR + image PII tests (T5.1~T5.8).
+"""Phase 5 — OCR + 이미지 PII 검사 회귀 방지 (T5.1~T5.8).
 
-VLM-bound tests are gated on a connectivity probe so they skip cleanly
-when the internal Qwen-VL endpoint is unreachable from the dev box.
-The rest of the suite (size limits, error mapping, masking, fallback
-parsing) runs offline.
+이미지 첨부의 OCR → 분석 흐름과 에러 매핑을 한꺼번에 검증한다. 두 부류:
+
+  - **VLM 의존 케이스** — 사내 Qwen-VL 엔드포인트가 접근 가능할 때만 실행
+    되도록 사전 connectivity probe 에 게이트됨 (CI/개발 머신에서 자동 skip)
+  - **오프라인 케이스** — 크기 제한, REQ-4031/4042/SVR-5004 매핑, paddle→vlm
+    자동 폴백, `OCR_ENGINE=vlm` 분기, JSON parsing 등 외부 의존 없이 실행
+
+PaddleOCR 가 기본 엔진 (Phase 4b 이후) 이므로 phase5 케이스는 vlm 경로를
+명시적으로 강제하는 monkeypatch 가 필요한 경우가 많다.
 """
 
 from __future__ import annotations
