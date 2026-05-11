@@ -38,8 +38,8 @@
 | 구성 요소 | 용도 |
 |-----------|------|
 | Nginx | TLS 종단 · 신뢰 영역 분리 |
-| vLLM + Qwen3.5-27B | OCR 기본 엔진 (GPU 서버) |
-| PaddleOCR | OCR 대안 엔진 (에어갭 환경) |
+| PaddleOCR PP-OCRv5 (한국어, CPU) | OCR 기본 엔진 — 런타임에 번들, 첫 실행 시 모델 자동 다운로드 |
+| vLLM + Qwen3.5-VL | OCR 폴백 / 옵트인 — `OCR_ENGINE=vlm` 또는 Paddle 예외 시 자동 호출 (GPU 서버) |
 | Prometheus + Grafana | 메트릭 수집 · 시각화 |
 
 ### 하드웨어 권장 사양
@@ -124,12 +124,11 @@ Docker를 사용하지 않는 경우 또는 별도 인프라를 이용하는 경
 # uv 설치 (권장)
 curl -Ls https://astral.sh/uv/install.sh | sh
 
-# 의존성 설치
+# 의존성 설치 (PaddleOCR 포함, 별도 extras 불필요)
 uv sync
-
-# PaddleOCR 엔진을 사용하는 경우 추가 설치
-uv pip install -e ".[ocr]"
 ```
+
+> Phase 4b 부터 `paddleocr` / `paddlepaddle` 가 main runtime 의존성에 포함되어 있어 `[ocr]` extras 는 no-op 입니다.
 
 ### 3-2. 시스템 서비스 (systemd)
 
@@ -197,8 +196,8 @@ python -m spacy download ko_core_news_lg
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
-| `OCR_ENGINE` | `vlm` 또는 `paddle` | `vlm` |
-| `VLM_ENDPOINT` | vLLM API 엔드포인트 | `http://localhost:18000/v1` |
+| `OCR_ENGINE` | `paddle` (기본) 또는 `vlm` | `paddle` |
+| `VLM_ENDPOINT` | vLLM API 엔드포인트 — Paddle 폴백 또는 `OCR_ENGINE=vlm` 시 사용 | `http://localhost:18000/v1` |
 | `VLM_MODEL_ID` | 모델 식별자 | `Qwen/Qwen3.5-27B-GPTQ-Int4` |
 | `VLM_API_KEY` | vLLM API 키 (선택) | `` |
 | `OCR_REQUEST_TIMEOUT_SECONDS` | OCR 요청 타임아웃 | `120` |
@@ -315,41 +314,40 @@ curl -X POST http://localhost:8000/v1/detect/post \
 
 ## 7. OCR 엔진 설정
 
-### 7-1. VLM 엔진 (기본, GPU 권장)
+### 7-1. PaddleOCR 엔진 (기본, CPU)
 
-내부 vLLM 서버가 필요합니다.
+`paddleocr` / `paddlepaddle` 은 main runtime 의존성에 포함되어 있어 별도 설치가 필요 없습니다 — `pip install -e .` 만으로 OCR 파이프라인이 자족합니다.
+
+```dotenv
+OCR_ENGINE=paddle
+OCR_REQUEST_TIMEOUT_SECONDS=120
+```
+
+- 첫 실행 시 PP-OCRv5 모델(~500 MB) 을 자동 다운로드 (`~/.paddleocr/`).
+- 에어갭 환경에서는 인터넷 연결된 머신에서 모델을 한 번 받아 같은 경로로 복사하거나 `PADDLE_OCR_HOME` 환경 변수로 모델 디렉터리를 지정합니다.
+- 모델 워밍업은 첫 호출에서 ~3–5초 발생하니 헬스체크에서 제외하세요.
+
+### 7-2. vLLM 엔진 (옵트인 / Paddle 폴백)
+
+저화질 스캔, 회전된 페이지, 표 레이아웃 회귀 등에서 정확도가 더 필요할 때 켭니다. Paddle 이 예외를 던지면 디스패처가 자동으로 vLLM 으로 폴백하므로 옵트인 없이도 보조 엔진으로 동작합니다.
 
 ```bash
 # vLLM 서버 구동 예시 (별도 GPU 서버)
-vllm serve Qwen/Qwen3.5-27B-GPTQ-Int4 \
+vllm serve Qwen/Qwen3.5-VL \
     --port 18000 \
-    --max-model-len 8192 \
-    --quantization gptq
+    --max-model-len 8192
 ```
 
 `.env` 설정:
 
 ```dotenv
-OCR_ENGINE=vlm
+OCR_ENGINE=vlm                                 # 명시적으로 vLLM 우선
 VLM_ENDPOINT=http://192.168.1.100:18000/v1
-VLM_MODEL_ID=Qwen/Qwen3.5-27B-GPTQ-Int4
+VLM_MODEL_ID=Qwen/Qwen3.5-VL
 OCR_REQUEST_TIMEOUT_SECONDS=120
 ```
 
 > 첫 번째 요청은 모델 웜업으로 **30초+** 소요될 수 있습니다.
-
-### 7-2. PaddleOCR 엔진 (에어갭 / CPU 전용)
-
-```bash
-# 추가 패키지 설치
-uv pip install -e ".[ocr]"
-
-# 환경 변수 설정
-export OCR_ENGINE=paddle
-```
-
-PaddleOCR은 첫 실행 시 모델 파일을 자동 다운로드합니다 (~500 MB).  
-에어갭 환경에서는 별도로 모델을 전송하고 `PADDLE_OCR_HOME` 환경 변수를 지정합니다.
 
 ---
 
@@ -483,7 +481,7 @@ docker compose up -d --no-deps api
 |------|------|------|
 | `readyz` → `"db":"error"` | DB 연결 실패 | `DATABASE_URL` 확인, PostgreSQL 상태 확인 |
 | `readyz` → `"redis":"error"` | Redis 연결 실패 | `REDIS_URL` 확인, Redis 상태 확인 |
-| OCR 응답 없음 (SVR-5004) | VLM 엔드포인트 불가 | `VLM_ENDPOINT` 확인, vLLM 서버 상태 확인 |
+| OCR 응답 없음 (SVR-5004) | Paddle 초기화 실패 + VLM 폴백도 다운 | `OCR_ENGINE` 확인, `~/.paddleocr` 모델 다운로드 여부 확인, VLM 폴백 사용 시 `VLM_ENDPOINT` 확인 |
 | 관리자 API 404 | `ADMIN_IP_ALLOWLIST` 미설정 | `.env`에 CIDR 추가 후 재시작 |
 | ClamAV 연결 실패 | clamd 미구동 | `docker compose up clamav` 또는 소프트 실패 허용 |
 | `REQ-4030` | 요청 본문 초과 | `MAX_REQUEST_BODY_BYTES` 조정 |
