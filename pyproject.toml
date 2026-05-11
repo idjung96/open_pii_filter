@@ -99,6 +99,12 @@ ignore = [
 # Alembic env.py + auto-generated migration scripts have framework-defined
 # signatures and don't follow project style.
 "app/db/migrations/**" = ["ANN", "ARG", "D", "E501", "I001", "RUF", "UP", "W"]
+# Swagger/OpenAPI 메타데이터 (description / examples 등) 는 한국어 한 문장이
+# 100자를 쉽게 넘어가므로 endpoint 정의 파일과 스키마에서는 E501 면제.
+"app/api/detect.py" = ["E501"]
+"app/api/jobs.py" = ["E501"]
+"app/api/schemas.py" = ["E501"]
+"app/main.py" = ["E501"]
 
 # ── Mypy ───────────────────────────────────────────────────────────────────
 [tool.mypy]

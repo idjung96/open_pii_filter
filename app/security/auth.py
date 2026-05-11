@@ -1,13 +1,23 @@
-"""Unified ``require_auth`` dependency for Phase 3.
+"""Phase 3 통합 인증 dependency — `require_auth`.
 
-Composes:
-  1. HMAC verification (T3.1~T3.5)
-  2. revoked-key check (T3.6)
-  3. IP allowlist (T3.8)
-  4. Rate limit (T3.7)
+모든 `/v1/*` 엔드포인트가 사용하는 단일 인증 게이트. 4단계 검증을 한 모듈
+에서 결정적 순서로 수행해 실패 시 일관된 응답 코드를 보장한다:
 
-All four checks live in one place so the endpoint declares a single
-``Depends(require_auth)`` and the failure ordering is deterministic.
+  1. **HMAC 서명 검증** (T3.1~T3.5)
+     - `X-Api-Key` / `X-Timestamp` / `X-Nonce` / `X-Signature` 4종 헤더
+     - canonical: `{ts}\\n{nonce}\\n{METHOD}\\n{path}\\n{sha256(body)}`
+     - 타임스탬프 ±5분 윈도우, nonce 10분 재사용 차단
+     - 실패 → REQ-4010 ~ REQ-4013 (HTTP 401)
+  2. **키 폐기 확인** (T3.6) — DB 의 `revoked_at` 컬럼 점검, REQ-4014 (403)
+  3. **IP allowlist** (T3.8) — 키 단위 + 전역 allowlist AND, REQ-4015 (403)
+  4. **Rate limit** (T3.7) — GCRA 토큰 버킷 (Redis), REQ-4020 (429 + Retry-After)
+
+이 dependency 한 군데에서만 보안 게이트가 적용되므로 신규 엔드포인트를
+추가할 때 `Depends(require_auth)` 만 선언하면 4종 검증이 자동 적용된다 —
+엔드포인트별 누락 / 순서 오류 / 응답 코드 불일치 회귀를 원천 방지.
+
+실패 응답은 모두 `EnvelopeHTTPException` 으로 던져 main.py 의 핸들러가
+flat envelope (`{"code": ..., "user_message": ...}`) 로 변환한다.
 """
 
 from __future__ import annotations
