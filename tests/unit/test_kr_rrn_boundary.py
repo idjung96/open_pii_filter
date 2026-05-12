@@ -29,7 +29,7 @@ def analyzer() -> AnalyzerEngine:
 
 
 def _hits(analyzer: AnalyzerEngine, text: str) -> list:
-    return [r for r in analyzer.analyze(text=text, language="ko", entities=["KR_RRN"])]
+    return list(analyzer.analyze(text=text, language="ko", entities=["KR_RRN"]))
 
 
 def _build_rrn(yymmdd: str, gender: int, individual5: str) -> str:
@@ -98,9 +98,7 @@ def test_foreigner_gender_codes_not_matched_by_kr_rrn(
         "990229",  # 1999 윤년 아님
     ],
 )
-def test_invalid_dates_dropped_by_validate_result(
-    analyzer: AnalyzerEngine, yymmdd: str
-) -> None:
+def test_invalid_dates_dropped_by_validate_result(analyzer: AnalyzerEngine, yymmdd: str) -> None:
     """체크섬은 통과해도 날짜가 비유효하면 validate_result 가 False 반환 → drop.
 
     Phase 1c — `validate_result` 가 `False` 를 돌려주면 Presidio 가 결과를 제거.
@@ -125,9 +123,7 @@ def test_leap_year_feb_29_valid(analyzer: AnalyzerEngine) -> None:
     "separator",
     [".", " ", "_", "/"],
 )
-def test_non_hyphen_separators_not_matched(
-    analyzer: AnalyzerEngine, separator: str
-) -> None:
+def test_non_hyphen_separators_not_matched(analyzer: AnalyzerEngine, separator: str) -> None:
     """`.`, 공백, `_`, `/` 등 비표준 분리자는 KR_RRN regex 에 매칭되지 않는다.
 
     표준 형식 (하이픈 / 분리자 없음) 만 인식해 오탐을 차단 — 임의 6+7 숫자가

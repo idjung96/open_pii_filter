@@ -15,7 +15,7 @@ Lua 스크립트 자체 로직 검증은 Redis-against-the-wire 통합 테스트
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -42,10 +42,7 @@ from app.security.rate_limit import (
 )
 def test_seconds_until_refill_basic(rate_per_minute: int, expected: int) -> None:
     """다양한 rate 에서 `seconds_until_refill` 의 변환 정확성."""
-    assert (
-        seconds_until_refill(capacity=10, rate_per_minute=rate_per_minute)
-        == expected
-    )
+    assert seconds_until_refill(capacity=10, rate_per_minute=rate_per_minute) == expected
 
 
 def test_seconds_until_refill_minimum_is_one_second() -> None:
@@ -123,9 +120,7 @@ def _make_limiter(script_return: list) -> tuple[RateLimiter, _MockScript]:
 async def test_consume_returns_allowed_outcome() -> None:
     """script 가 [1, 0, 5] 반환 → allowed=True / retry_after=0 / remaining=5."""
     limiter, _ = _make_limiter([1, 0, 5])
-    out = await limiter.consume(
-        "test:key", capacity=10, rate_per_second=1.0
-    )
+    out = await limiter.consume("test:key", capacity=10, rate_per_second=1.0)
     assert out.allowed is True
     assert out.retry_after == 0
     assert out.remaining == 5.0
@@ -134,9 +129,7 @@ async def test_consume_returns_allowed_outcome() -> None:
 async def test_consume_returns_denied_outcome() -> None:
     """script 가 [0, 12, 0] 반환 → allowed=False / retry_after=12 / remaining=0."""
     limiter, _ = _make_limiter([0, 12, 0])
-    out = await limiter.consume(
-        "test:key", capacity=10, rate_per_second=1.0
-    )
+    out = await limiter.consume("test:key", capacity=10, rate_per_second=1.0)
     assert out.allowed is False
     assert out.retry_after == 12
     assert out.remaining == 0.0
@@ -145,9 +138,7 @@ async def test_consume_returns_denied_outcome() -> None:
 async def test_consume_passes_key_and_args_correctly() -> None:
     """script 호출 시 keys=[bucket_key], args=[rate, capacity, now, cost] 형태."""
     limiter, script = _make_limiter([1, 0, 9])
-    await limiter.consume(
-        "rl:apikey:k1:m", capacity=60, rate_per_second=1.0, cost=1
-    )
+    await limiter.consume("rl:apikey:k1:m", capacity=60, rate_per_second=1.0, cost=1)
     assert len(script.calls) == 1
     call = script.calls[0]
     assert call["keys"] == ["rl:apikey:k1:m"]
@@ -165,9 +156,7 @@ async def test_consume_passes_key_and_args_correctly() -> None:
 async def test_consume_custom_cost() -> None:
     """cost 인자가 그대로 script 에 전달."""
     limiter, script = _make_limiter([1, 0, 7])
-    await limiter.consume(
-        "test:k", capacity=10, rate_per_second=1.0, cost=3
-    )
+    await limiter.consume("test:k", capacity=10, rate_per_second=1.0, cost=3)
     assert script.calls[0]["args"][3] == 3
 
 

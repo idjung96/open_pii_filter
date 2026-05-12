@@ -79,9 +79,7 @@ async def test_each_kr_recognizer_blocks_body_e2e(
     assert data["code"] == expected_code, f"{body} → {data}"
     # detections 안에 expected_entity 가 들어 있어야 함.
     entity_types = {d["entity_type"] for d in data.get("detections", [])}
-    assert expected_entity in entity_types, (
-        f"detections 에 {expected_entity} 없음: {entity_types}"
-    )
+    assert expected_entity in entity_types, f"detections 에 {expected_entity} 없음: {entity_types}"
 
 
 async def test_email_body_blocks_with_block_2099(client: AsyncClient) -> None:
@@ -151,9 +149,7 @@ async def test_clean_body_passes_with_ok_0000(client: AsyncClient) -> None:
         "여권 M12345678",
     ],
 )
-async def test_user_message_does_not_leak_plaintext_pii(
-    client: AsyncClient, body: str
-) -> None:
+async def test_user_message_does_not_leak_plaintext_pii(client: AsyncClient, body: str) -> None:
     """BLOCK 응답의 user_message 에 원본 평문 PII 가 절대 등장하지 않음."""
     resp = await client.post(
         "/v1/detect/post",

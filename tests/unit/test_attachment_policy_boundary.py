@@ -54,7 +54,7 @@ class _FakeSession:
     def __init__(self, rows: list[tuple[str | None, str | None]] | None = None) -> None:
         self._rows = rows or []
 
-    async def execute(self, _stmt) -> _FakeResult:  # type: ignore[no-untyped-def]  # noqa: ANN001
+    async def execute(self, _stmt) -> _FakeResult:  # type: ignore[no-untyped-def]
         return _FakeResult(self._rows)
 
 
@@ -197,7 +197,7 @@ def test_extraction_error_is_a_python_exception() -> None:
 # ── dispatcher MIME 상수 노출 ────────────────────────────────────────────
 def test_pdf_mime_constant() -> None:
     """PDF MIME 가 정확히 `application/pdf` 하나만."""
-    assert PDF_MIMES == frozenset({"application/pdf"})
+    assert frozenset({"application/pdf"}) == PDF_MIMES
 
 
 def test_docx_mime_constant_is_openxml_only() -> None:
@@ -208,18 +208,13 @@ def test_docx_mime_constant_is_openxml_only() -> None:
 
 def test_xlsx_mime_constant_is_openxml_only() -> None:
     """XLSX 는 OpenXML spreadsheetml 만 (.xls 는 deny-list)."""
-    assert (
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in XLSX_MIMES
-    )
+    assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in XLSX_MIMES
     assert "application/vnd.ms-excel" not in XLSX_MIMES
 
 
 def test_pptx_mime_constant_is_openxml_only() -> None:
     """PPTX 는 OpenXML presentationml 만 (.ppt 는 deny-list)."""
-    assert (
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        in PPTX_MIMES
-    )
+    assert "application/vnd.openxmlformats-officedocument.presentationml.presentation" in PPTX_MIMES
     assert "application/vnd.ms-powerpoint" not in PPTX_MIMES
 
 
@@ -283,7 +278,7 @@ def test_dispatch_empty_mime_raises_req_4033() -> None:
 def test_dispatch_text_plain_utf8_decodes_korean() -> None:
     """UTF-8 한글 텍스트 첨부가 정확히 decode 된다."""
     a = _make_attachment(mime_type="text/plain", filename="memo.txt")
-    payload = "안녕하세요. 게시판 시스템입니다.".encode("utf-8")
+    payload = "안녕하세요. 게시판 시스템입니다.".encode()
     text, needs_ocr = asyncio.run(dispatch_extract(payload, a))
     assert "안녕하세요" in text
     assert needs_ocr is False

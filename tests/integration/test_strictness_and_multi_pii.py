@@ -16,8 +16,6 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-import pytest
-
 if TYPE_CHECKING:
     from httpx import AsyncClient
 
@@ -83,9 +81,7 @@ async def test_strong_signal_blocks_at_all_strictness_levels(
             json=_payload(body=body, strictness=strictness),
         )
         data = resp.json()
-        assert data["verdict"] == "BLOCK", (
-            f"{strictness}: 강한 신호인데 PASS — {data}"
-        )
+        assert data["verdict"] == "BLOCK", f"{strictness}: 강한 신호인데 PASS — {data}"
         assert data["code"] == "BLOCK-2001"
 
 
@@ -156,10 +152,7 @@ async def test_rrn_plus_card_triggers_block_2008(client: AsyncClient) -> None:
 
 async def test_three_distinct_pii_still_block_2008(client: AsyncClient) -> None:
     """3종 entity 가 모두 BLOCK 진입 → BLOCK-2008 (multi-type)."""
-    body = (
-        "주민 900201-2320987 / 카드 4242-4242-4242-4242 / "
-        "여권 M12345678"
-    )
+    body = "주민 900201-2320987 / 카드 4242-4242-4242-4242 / 여권 M12345678"
     resp = await client.post(
         "/v1/detect/post",
         json=_payload(body=body),

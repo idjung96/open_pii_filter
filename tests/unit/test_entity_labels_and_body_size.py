@@ -22,11 +22,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.core.entity_labels import (
-    ENTITY_LABELS_KR,
     _FALLBACK_LABEL,
+    ENTITY_LABELS_KR,
     detected_summary_kr,
     label_for,
 )
@@ -53,9 +51,7 @@ def test_entity_labels_are_korean() -> None:
     """모든 라벨이 한글 — entity 코드가 영문으로 노출되는 사고 방지."""
     for etype, label in ENTITY_LABELS_KR.items():
         # 한국어 라벨은 한글 음절 포함.
-        assert any("가" <= c <= "힣" for c in label), (
-            f"{etype} 라벨에 한글 없음: {label!r}"
-        )
+        assert any("가" <= c <= "힣" for c in label), f"{etype} 라벨에 한글 없음: {label!r}"
 
 
 def test_entity_labels_no_empty_or_whitespace() -> None:

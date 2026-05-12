@@ -133,7 +133,7 @@ def test_every_mapped_entity_blocks_at_threshold(
 
     회귀 시나리오: 정책 매핑에 신규 entity 가 추가됐는데 임계값 비교가
     실수로 ``score > threshold`` (strict) 가 되면 정확 경계에서 PASS 가 되어
-    BLOCK 누락. 이 테스트가 모든 entity × 모든 strictness 의 경계를 동시에
+    BLOCK 누락. 이 테스트가 모든 entity x 모든 strictness 의 경계를 동시에
     덮어 그 시점에 깨짐.
     """
     code = map_detection_to_code(
@@ -168,9 +168,7 @@ def test_attachment_field_blocks_at_threshold(strictness: str, threshold: float)
     ("strictness", "threshold"),
     [("low", LOW), ("medium", MED), ("high", HIGH)],
 )
-def test_attachment_field_just_below_threshold_passes(
-    strictness: str, threshold: float
-) -> None:
+def test_attachment_field_just_below_threshold_passes(strictness: str, threshold: float) -> None:
     """첨부 필드 경계 바로 아래는 PASS (오탐 흡수 방지)."""
     code = map_detection_to_code(
         entity_type="KR_RRN",
@@ -262,7 +260,7 @@ def test_threshold_constants_match_policy_module() -> None:
     여전히 유효한지 재확인을 강제한다.
     """
     # private but stable — policy module's threshold table.
-    from app.core.policies import _BLOCK_THRESHOLD  # noqa: PLC2701
+    from app.core.policies import _BLOCK_THRESHOLD
 
     assert math.isclose(_BLOCK_THRESHOLD["low"], LOW)
     assert math.isclose(_BLOCK_THRESHOLD["medium"], MED)

@@ -127,9 +127,7 @@ def test_scrub_value_in_dict() -> None:
 
 def test_scrub_value_in_list() -> None:
     """list 요소 각각 스크럽."""
-    out = _scrub_value(
-        ["민원1 900101-1234567", "민원2 010-1234-5678", "정상 메시지"]
-    )
+    out = _scrub_value(["민원1 900101-1234567", "민원2 010-1234-5678", "정상 메시지"])
     assert isinstance(out, list)
     assert "[REDACTED-RRN]" in out[0]
     assert "[REDACTED-PHONE]" in out[1]

@@ -77,18 +77,14 @@ def test_invalid_checksum_dropped(analyzer: AnalyzerEngine) -> None:
         "123-456-7890",  # 3-3-4
     ],
 )
-def test_malformed_hyphen_positions_not_matched(
-    analyzer: AnalyzerEngine, fmt: str
-) -> None:
+def test_malformed_hyphen_positions_not_matched(analyzer: AnalyzerEngine, fmt: str) -> None:
     """hyphen 위치가 표준 (3-2-5) 이 아니면 hyphen 패턴에 매칭되지 않는다."""
     text = f"사업자 {fmt}"
     hits = _hits(analyzer, text)
     # hyphen 패턴은 매칭 안 되지만, plain 10자리 패턴이 잡힐 수 있음.
     # 그건 별도 테스트가 검증.
     hyphen_hits = [
-        h
-        for h in hits
-        if "-" in text[h.start : h.end] and text[h.start : h.end].count("-") == 2
+        h for h in hits if "-" in text[h.start : h.end] and text[h.start : h.end].count("-") == 2
     ]
     assert not hyphen_hits, f"잘못된 hyphen 위치가 매칭됨: {fmt} → {hyphen_hits}"
 
@@ -113,7 +109,7 @@ def test_plain_10digit_without_context_still_blocks_when_checksum_valid(
 
     `validate_result` 가 True 를 반환하면 Presidio 가 score 를 1.0 으로
     승격하기 때문에 패턴 (hyphen 0.5 / plain 0.3) 의 초기 score 는 무관해진다.
-    이는 체크섬이 깨질 확률이 통계적으로 충분히 낮다 (1/10 × 형식 + 좌우
+    이는 체크섬이 깨질 확률이 통계적으로 충분히 낮다 (1/10 곱하기 형식 + 좌우
     boundary) 는 보안 우선 정책이다.
 
     -- 부작용: 일반 10자리 코드 중 ~10% 가 우연히 BLOCK 될 수 있음.

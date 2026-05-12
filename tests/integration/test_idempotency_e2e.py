@@ -209,7 +209,7 @@ async def test_idempotency_default_ttl_is_24h_in_module() -> None:
 
     from app.security.idempotency import DEFAULT_TTL
 
-    assert DEFAULT_TTL == timedelta(hours=24)
+    assert timedelta(hours=24) == DEFAULT_TTL
 
 
 # ── concurrent invocation pattern ──────────────────────────────────────

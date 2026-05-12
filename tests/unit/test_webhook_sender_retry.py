@@ -62,9 +62,7 @@ def test_retry_delays_total_budget_about_5_minutes() -> None:
 
 
 # ── _is_retryable status 매핑 ────────────────────────────────────────────
-@pytest.mark.parametrize(
-    "status", [500, 501, 502, 503, 504, 505, 599, 408, 429]
-)
+@pytest.mark.parametrize("status", [500, 501, 502, 503, 504, 505, 599, 408, 429])
 def test_is_retryable_5xx_and_408_429(status: int) -> None:
     """5xx + 408 (timeout) + 429 (rate limit) 는 재시도 대상."""
     assert _is_retryable(status) is True
@@ -91,7 +89,10 @@ def test_sign_returns_three_required_headers() -> None:
 def test_sign_timestamp_is_unix_seconds_string() -> None:
     """X-Timestamp 는 현재 UNIX 초의 문자열."""
     headers = _sign(
-        secret="s", method="POST", path="/x", body=b""  # noqa: S106
+        secret="s",  # noqa: S106
+        method="POST",
+        path="/x",
+        body=b"",
     )
     ts = int(headers["X-Timestamp"])
     import time
@@ -146,9 +147,7 @@ def test_sign_method_normalized_to_upper_in_canonical() -> None:
         path="/x",
         body=body,
     )
-    expected_upper = hmac.new(
-        secret.encode(), canonical_upper.encode(), hashlib.sha256
-    ).hexdigest()
+    expected_upper = hmac.new(secret.encode(), canonical_upper.encode(), hashlib.sha256).hexdigest()
     assert headers["X-Signature"] == expected_upper
 
 
@@ -547,11 +546,12 @@ def test_serialize_payload_returns_json_array() -> None:
 
 
 def test_serialize_payload_preserves_korean_without_escape() -> None:
-    """`ensure_ascii=False` — 한글이 escape 되지 않고 그대로 보존."""
+    """`ensure_ascii=False` — 한글이 escape 되지 않고 그대로 보존.
+
+    한글 사용자 메시지는 attachment_results 가 아닌 payload 본문에 있으므로
+    attachment_results 안의 filename 을 한글로 바꿔 직렬화 결과를 검증.
+    """
     payload = _make_payload()
-    out = serialize_payload(payload)
-    # 한글 사용자 메시지는 attachment_results 가 아닌 payload 본문에 있으므로
-    # attachment_results 자체에 한글 검증을 위해 filename 한글 케이스 추가.
     payload_kr = payload.model_copy(
         update={
             "attachment_results": [

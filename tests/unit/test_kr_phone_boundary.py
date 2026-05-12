@@ -55,9 +55,7 @@ def _phone_hits(analyzer: AnalyzerEngine, text: str) -> list:
         "064",  # 제주
     ],
 )
-def test_all_regional_landlines_with_hyphen_detected(
-    analyzer: AnalyzerEngine, area: str
-) -> None:
+def test_all_regional_landlines_with_hyphen_detected(analyzer: AnalyzerEngine, area: str) -> None:
     """16 개 지역번호 모두 hyphen 형식 (`AAA-XXXX-YYYY`) 으로 검출.
 
     한 지역번호라도 정규식에서 빠지면 그 지역 민원이 BLOCK 누락 사고.
@@ -181,9 +179,7 @@ def test_bare_phone_8digit_with_context_blocks(analyzer: AnalyzerEngine) -> None
 
 # ── 등록된 모든 컨텍스트 키워드 부스트 ─────────────────────────────────
 @pytest.mark.parametrize("ctx", KrPhoneRecognizer.CONTEXT)
-def test_each_context_keyword_boosts_bare_phone(
-    analyzer: AnalyzerEngine, ctx: str
-) -> None:
+def test_each_context_keyword_boosts_bare_phone(analyzer: AnalyzerEngine, ctx: str) -> None:
     """등록된 13 개 컨텍스트 키워드 각각이 bare phone 의 score 를 올린다.
 
     회귀 시나리오: 누군가 `KrPhoneRecognizer.CONTEXT` 에서 키워드를 제거
@@ -233,7 +229,7 @@ def test_080_toll_free_with_hyphen(analyzer: AnalyzerEngine) -> None:
     assert hits
 
 
-def test_050X_virtual_phone(analyzer: AnalyzerEngine) -> None:
+def test_050x_virtual_phone(analyzer: AnalyzerEngine) -> None:
     """050X (가상전화번호) 도 검출."""
     text = "연락 0505-123-4567"
     hits = _phone_hits(analyzer, text)

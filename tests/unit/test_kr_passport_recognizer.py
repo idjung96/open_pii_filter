@@ -62,7 +62,29 @@ def test_two_letter_prefix_detected(analyzer: AnalyzerEngine, prefix: str) -> No
 
 
 # ── 미정의 letter (1자 형식에서 거절) ────────────────────────────────────
-@pytest.mark.parametrize("letter", ["A", "B", "C", "E", "F", "H", "I", "J", "K", "L", "N", "Q", "U", "V", "W", "X", "Y", "Z"])
+@pytest.mark.parametrize(
+    "letter",
+    [
+        "A",
+        "B",
+        "C",
+        "E",
+        "F",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "N",
+        "Q",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+    ],
+)
 def test_undefined_single_letter_not_matched_at_one_letter_pattern(
     analyzer: AnalyzerEngine, letter: str
 ) -> None:

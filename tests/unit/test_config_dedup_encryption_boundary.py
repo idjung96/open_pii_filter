@@ -268,8 +268,8 @@ def test_encrypt_ciphertext_is_string(_encryption_key) -> None:
 
 
 def test_decrypt_invalid_base64_raises(_encryption_key) -> None:
-    """잘못된 base64 입력은 명시적 예외 — silent return 금지."""
-    with pytest.raises(Exception):
+    """잘못된 base64 입력은 명시적 EncryptionError — silent return 금지."""
+    with pytest.raises(encryption.EncryptionError):
         encryption.decrypt_str("not!base64-at!all@@")
 
 

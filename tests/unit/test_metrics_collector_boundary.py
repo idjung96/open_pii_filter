@@ -6,7 +6,7 @@ attachment_size) 외에 다음 helper 들이 dashboard / SLA 모니터링의 근
 회귀를 별도 가드:
 
   - ``observe_http`` — HTTP 레이어 counter + histogram 페어 동시 증가
-  - ``observe_detection`` — entity × verdict 별 카운터
+  - ``observe_detection`` — entity x verdict 별 카운터
   - ``observe_extraction_job`` — async 워커 상태 카운터
   - ``observe_feedback`` — Phase 7 피드백 카운터 (라벨 없음)
   - ``observe_rate_limit_rejection`` — caller / ip 스코프
@@ -142,9 +142,9 @@ def test_observe_http_long_request_lands_in_5s_bucket() -> None:
     assert after - before == 1.0
 
 
-# ── observe_detection — entity × verdict 독립 시리즈 ────────────────────
+# ── observe_detection — entity x verdict 독립 시리즈 ────────────────────
 def test_observe_detection_counter_per_entity_and_verdict() -> None:
-    """entity_type × verdict 의 cross-product 가 각자 독립 시리즈."""
+    """entity_type x verdict 의 cross-product 가 각자 독립 시리즈."""
     rrn_block_before = _counter(
         "pii_detections_total",
         {"entity_type": "KR_RRN", "verdict": "BLOCK"},
@@ -215,12 +215,8 @@ def test_observe_rate_limit_rejection_caller_vs_ip_scope() -> None:
     observe_rate_limit_rejection(scope="ip")
     observe_rate_limit_rejection(scope="ip")
 
-    assert (
-        _counter("rate_limit_rejections_total", {"scope": "caller"}) - caller_before == 1.0
-    )
-    assert (
-        _counter("rate_limit_rejections_total", {"scope": "ip"}) - ip_before == 2.0
-    )
+    assert _counter("rate_limit_rejections_total", {"scope": "caller"}) - caller_before == 1.0
+    assert _counter("rate_limit_rejections_total", {"scope": "ip"}) - ip_before == 2.0
 
 
 # ── 모든 helper 의 `suppress(Exception)` 가드 ──────────────────────────
@@ -337,9 +333,7 @@ def test_observe_http_above_5s_falls_into_inf_bucket() -> None:
 def test_observe_http_sum_accumulates_duration() -> None:
     """`http_request_duration_seconds_sum` 이 관측 합산."""
     labels = {"method": "POST", "path": "/sum-test"}
-    before_sum = REGISTRY.get_sample_value(
-        "http_request_duration_seconds_sum", labels
-    ) or 0.0
+    before_sum = REGISTRY.get_sample_value("http_request_duration_seconds_sum", labels) or 0.0
     observe_http(
         method="POST",
         path="/sum-test",
@@ -352,9 +346,7 @@ def test_observe_http_sum_accumulates_duration() -> None:
         response_code="OK-0000",
         duration_seconds=0.4,
     )
-    after_sum = REGISTRY.get_sample_value(
-        "http_request_duration_seconds_sum", labels
-    ) or 0.0
+    after_sum = REGISTRY.get_sample_value("http_request_duration_seconds_sum", labels) or 0.0
     assert abs((after_sum - before_sum) - 0.7) < 1e-9
 
 

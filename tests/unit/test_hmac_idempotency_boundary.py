@@ -35,8 +35,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.security.hmac_auth import (
-    HmacAuthError,
     TIMESTAMP_WINDOW_SECONDS,
+    HmacAuthError,
     _canonical_string,
     _check_timestamp,
     compute_signature,
@@ -65,23 +65,13 @@ def test_canonical_string_format_exact() -> None:
         body=b"",
     )
     expected_body_digest = hashlib.sha256(b"").hexdigest()
-    assert s == (
-        "1700000000\n"
-        "n0123456789abcdef\n"
-        "POST\n"
-        "/v1/detect/post\n"
-        f"{expected_body_digest}"
-    )
+    assert s == (f"1700000000\nn0123456789abcdef\nPOST\n/v1/detect/post\n{expected_body_digest}")
 
 
 def test_canonical_string_method_case_normalized_upper() -> None:
     """``method`` 가 소문자/대문자 어떤 형태로 들어와도 정규화된다."""
-    a = _canonical_string(
-        timestamp="1", nonce="n" * 16, method="post", path="/v1/x", body=b""
-    )
-    b = _canonical_string(
-        timestamp="1", nonce="n" * 16, method="POST", path="/v1/x", body=b""
-    )
+    a = _canonical_string(timestamp="1", nonce="n" * 16, method="post", path="/v1/x", body=b"")
+    b = _canonical_string(timestamp="1", nonce="n" * 16, method="POST", path="/v1/x", body=b"")
     assert a == b
     assert "POST" in a  # method 가 대문자로 normalize
 
@@ -97,13 +87,9 @@ def test_canonical_string_empty_body_uses_sha256_of_empty() -> None:
 
 def test_canonical_string_utf8_body_consistent() -> None:
     """UTF-8 한글 body 가 안정적으로 같은 digest 를 만든다."""
-    body = "주민번호 900101-1234567 입니다".encode("utf-8")
-    s1 = _canonical_string(
-        timestamp="1", nonce="n" * 16, method="POST", path="/x", body=body
-    )
-    s2 = _canonical_string(
-        timestamp="1", nonce="n" * 16, method="POST", path="/x", body=body
-    )
+    body = "주민번호 900101-1234567 입니다".encode()
+    s1 = _canonical_string(timestamp="1", nonce="n" * 16, method="POST", path="/x", body=body)
+    s2 = _canonical_string(timestamp="1", nonce="n" * 16, method="POST", path="/x", body=body)
     assert s1 == s2
 
 
@@ -331,7 +317,7 @@ def test_idempotency_clear_empties_all(fresh_cache: IdempotencyCache) -> None:
 
 def test_idempotency_default_ttl_is_24h() -> None:
     """기본 TTL 이 정확히 24 시간 (§2.6 스펙)."""
-    assert DEFAULT_TTL == timedelta(hours=24)
+    assert timedelta(hours=24) == DEFAULT_TTL
 
 
 def test_idempotency_ttl_eviction_drops_stale_entry() -> None:
@@ -345,9 +331,7 @@ def test_idempotency_ttl_eviction_drops_stale_entry() -> None:
     entry.created_at = datetime.now(tz=UTC) - timedelta(seconds=5)
 
     outcome, _ = cache.reserve(rid)
-    assert outcome is ReserveOutcome.NEW, (
-        f"TTL 만료된 엔트리가 evict 되지 않음: {outcome}"
-    )
+    assert outcome is ReserveOutcome.NEW, f"TTL 만료된 엔트리가 evict 되지 않음: {outcome}"
 
 
 def test_idempotency_complete_updates_state_in_place(

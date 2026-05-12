@@ -134,8 +134,7 @@ def test_is_allowed_truth_table(
 ) -> None:
     """key / global allowlist 의 모든 조합이 둘 다 통과 (AND) 의미를 가진다."""
     assert (
-        is_allowed(ip, key_allowlist=key_allowlist, global_allowlist=global_allowlist)
-        is expected
+        is_allowed(ip, key_allowlist=key_allowlist, global_allowlist=global_allowlist) is expected
     )
 
 
@@ -247,7 +246,6 @@ def test_authed_caller_ip_allowlist_is_tuple() -> None:
 def test_admin_allowlist_parser_handles_empty_setting() -> None:
     """`admin_ip_allowlist` 가 빈 문자열 → 빈 리스트."""
     from app.api.admin_audit import _admin_allowlist
-
     from app.config import get_settings
 
     settings = get_settings()
@@ -314,9 +312,13 @@ def test_admin_gate_three_layers_compose_to_and() -> None:
     """
     # 시나리오: admin=True, IP 매칭 → 통과
     ok_caller = AuthedCaller(
-        key_id="k", name="x",
-        rate_per_minute=60, rate_per_hour=3600,
-        ip_allowlist=None, client_ip="203.0.113.5", is_admin=True,
+        key_id="k",
+        name="x",
+        rate_per_minute=60,
+        rate_per_hour=3600,
+        ip_allowlist=None,
+        client_ip="203.0.113.5",
+        is_admin=True,
     )
     assert is_allowed(ok_caller.client_ip, global_allowlist=["203.0.113.0/24"])
     assert ok_caller.is_admin
@@ -326,8 +328,12 @@ def test_admin_gate_three_layers_compose_to_and() -> None:
 
     # 시나리오: admin=False (auth 통과해도) → require_admin 단에서 거절
     not_admin = ok_caller.__class__(
-        key_id="k", name="x",
-        rate_per_minute=60, rate_per_hour=3600,
-        ip_allowlist=None, client_ip="203.0.113.5", is_admin=False,
+        key_id="k",
+        name="x",
+        rate_per_minute=60,
+        rate_per_hour=3600,
+        ip_allowlist=None,
+        client_ip="203.0.113.5",
+        is_admin=False,
     )
     assert not not_admin.is_admin

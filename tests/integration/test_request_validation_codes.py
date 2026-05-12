@@ -88,9 +88,7 @@ async def test_missing_post_body_maps_to_req_4001(client: AsyncClient) -> None:
         "",  # 빈 문자열
     ],
 )
-async def test_invalid_request_id_uuid_maps_to_req_4004(
-    client: AsyncClient, bad_id: str
-) -> None:
+async def test_invalid_request_id_uuid_maps_to_req_4004(client: AsyncClient, bad_id: str) -> None:
     """request_id 가 UUID 형식 위반 → REQ-4004."""
     payload = _valid_payload()
     payload["request_id"] = bad_id

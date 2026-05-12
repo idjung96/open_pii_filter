@@ -47,7 +47,8 @@ from app.api.schemas import (
     WebhookAttachmentResult,
     WebhookPayload,
 )
-from app.core.codes import CODES, Verdict as CodeVerdict, get_code
+from app.core.codes import CODES, get_code
+from app.core.codes import Verdict as CodeVerdict
 
 # 합성 PII 평문 — 응답 어디에도 등장해서는 안 되는 문자열.
 SYN_RRN = "900101-1234567"
@@ -186,9 +187,7 @@ def test_error_response_developer_message_is_rendered_safely(
         assert resp.developer_message is not None, f"{code}: dev_message 비어 있음"
         # 합성 PII 평문이 어쩌다 dev_message 에 섞여 들어오지 않는다.
         for plain in [SYN_RRN, SYN_PHONE, SYN_EMAIL, SYN_CARD]:
-            assert plain not in resp.developer_message, (
-                f"{code}: dev_message 에 평문 {plain} 노출"
-            )
+            assert plain not in resp.developer_message, f"{code}: dev_message 에 평문 {plain} 노출"
 
 
 # ── multi-entity BLOCK-2008 에서도 entity 코드 비노출 ──────────────────
