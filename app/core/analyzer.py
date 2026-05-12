@@ -1,20 +1,31 @@
-"""Build a Presidio AnalyzerEngine for Korean text.
+"""한국어 본문/첨부 검사용 Presidio AnalyzerEngine 빌더.
 
-Wires together:
-  - spaCy `ko_core_news_lg` as the NLP tokenizer backbone (NER 미사용)
-  - Custom KR recognizers in `app.core.recognizers`
-  - Selected Presidio built-ins: Email, CreditCard, IP, URL, IBAN, Crypto
+다음 구성요소를 하나의 분석기로 묶는다:
 
-The factory caches a single AnalyzerEngine across the process; constructing
-one costs ~1.5 s and we never want that on the request path.
+  - **spaCy `ko_core_news_lg`** — NLP 토크나이저 백본 (NER 미사용, 토크나이저
+    역할만)
+  - **커스텀 KR 인식기** (`app.core.recognizers`):
+    `KrRrnRecognizer` (주민등록번호) / `KrDriverLicenseRecognizer` (운전면허) /
+    `KrPassportRecognizer` (여권) / `KrForeignerRegRecognizer` (외국인등록번호) /
+    `KrPhoneRecognizer` (전화 — 모바일/유선/특수/지역번호 없는 표기) /
+    `KrBusinessNumRecognizer` (사업자번호) / `KrBankAccountRecognizer` (계좌)
+  - **Presidio 내장 인식기 선별**: Email, CreditCard, IP, URL, IBAN, Crypto
 
-Phase 9E-A — SpacyRecognizer 등록 제거. NER (PERSON/LOCATION/ORGANIZATION)
-단독 검출은 일반 게시 컨텐츠에서 오탐 폭증의 원인이 되어 폐기. 정규식 +
-체크섬 기반 PII 만으로 법적 위험 커버는 충분. spaCy NLP 엔진 자체는
-Presidio AnalyzerEngine 의 토크나이저로 여전히 필요하므로 유지한다.
+`lru_cache` 로 프로세스 수명 동안 단일 AnalyzerEngine 을 재사용한다 — 초기
+로딩이 ~1.5초 걸리므로 매 요청마다 재구성하면 핫패스가 무너진다.
 
-Phase 9E-B — pii_patterns 테이블 + DB 패턴 통합 헬퍼 제거. deny_list 는
-별도 메커니즘으로 보존되며 ``build_analyzer_with_deny_list()`` 가 처리한다.
+deny-list (운영자가 추가한 직원명·키워드) 는 별도 메커니즘으로 보존되며
+`build_analyzer_with_deny_list()` 가 DB 행을 읽어 추가 `PatternRecognizer`
+를 합성해 사용한다 — 정책 변경이 재시작 없이 반영되도록.
+
+Phase 9E-A 메모: `SpacyRecognizer` 등록을 제거했다. NER (PERSON/LOCATION/
+ORGANIZATION) 단독 검출은 일반 게시 컨텐츠에서 오탐 폭증의 원인이 되어
+폐기. 정규식 + 체크섬 기반 PII 만으로 법적 위험 커버는 충분하다는 운영자
+결정. spaCy NLP 엔진 자체는 토크나이저로 여전히 필요하므로 유지.
+
+Phase 9E-B 메모: `pii_patterns` 테이블과 DB 패턴 통합 헬퍼는 폐기됐다.
+운영자 커스텀 정규식은 `pii_policies` 의 score-band override 로 표현 가능
+하다는 결정. deny_list 만 별도 인프라로 보존.
 """
 
 from __future__ import annotations

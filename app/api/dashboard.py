@@ -33,8 +33,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, select
 
@@ -769,35 +769,49 @@ _DEPENDENCIES: list[dict[str, str]] = [
     # 웹/런타임
     {
         "name": "FastAPI",
-        "version": ">=0.115",
+        "version": "0.136.1 (pin: >=0.115)",
         "category": "Web Framework",
         "license": "MIT",
         "purpose": "REST API 프레임워크",
     },
     {
         "name": "Uvicorn",
-        "version": ">=0.32",
+        "version": "0.46.0 (pin: >=0.32, extras: [standard])",
         "category": "Web Framework",
         "license": "BSD-3-Clause",
         "purpose": "ASGI 서버",
     },
     {
+        "name": "Starlette",
+        "version": "transitive (FastAPI 의 미들웨어 베이스)",
+        "category": "Web Framework",
+        "license": "BSD-3-Clause",
+        "purpose": "ASGI 미들웨어 (BodySize/Audit/CORS 등)",
+    },
+    {
+        "name": "python-multipart",
+        "version": "0.0.27 (pin: >=0.0.20)",
+        "category": "Web Framework",
+        "license": "Apache-2.0",
+        "purpose": "multipart/form-data 파싱 — /admin/test 첨부 업로드",
+    },
+    {
         "name": "Pydantic",
-        "version": ">=2.9",
+        "version": "2.13.3 (pin: >=2.9)",
         "category": "Web Framework",
         "license": "MIT",
-        "purpose": "데이터 검증/직렬화",
+        "purpose": "데이터 검증/직렬화 — 요청/응답 스키마",
     },
     {
         "name": "pydantic-settings",
-        "version": ">=2.6",
+        "version": "2.14.0 (pin: >=2.6)",
         "category": "Web Framework",
         "license": "MIT",
-        "purpose": "환경 변수 기반 설정",
+        "purpose": "환경 변수 기반 설정 (`app/config.py`)",
     },
     {
         "name": "Jinja2",
-        "version": "transitive",
+        "version": "3.1.6 (transitive)",
         "category": "Web Framework",
         "license": "BSD-3-Clause",
         "purpose": "관리자 대시보드 템플릿 렌더링",
@@ -805,57 +819,57 @@ _DEPENDENCIES: list[dict[str, str]] = [
     # 데이터베이스
     {
         "name": "SQLAlchemy",
-        "version": ">=2.0",
+        "version": "2.0.49 (pin: >=2.0, extras: [asyncio])",
         "category": "Database",
         "license": "MIT",
-        "purpose": "ORM (asyncio 지원)",
+        "purpose": "ORM (async)",
     },
     {
         "name": "asyncpg",
-        "version": ">=0.29",
+        "version": "0.31.0 (pin: >=0.29)",
         "category": "Database",
         "license": "Apache-2.0",
-        "purpose": "PostgreSQL 비동기 드라이버",
+        "purpose": "PostgreSQL 비동기 드라이버 (런타임 쿼리)",
     },
     {
         "name": "psycopg2-binary",
-        "version": ">=2.9",
+        "version": "2.9.12 (pin: >=2.9)",
         "category": "Database",
         "license": "LGPL-3.0",
-        "purpose": "PostgreSQL 동기 드라이버 (Alembic용)",
+        "purpose": "PostgreSQL 동기 드라이버 (Alembic 마이그레이션 전용)",
     },
     {
         "name": "Alembic",
-        "version": ">=1.13",
+        "version": "1.18.4 (pin: >=1.13)",
         "category": "Database",
         "license": "MIT",
         "purpose": "DB 마이그레이션",
     },
     {
         "name": "redis-py",
-        "version": ">=5.0",
+        "version": "7.4.0 (pin: >=5.0)",
         "category": "Database",
         "license": "MIT",
-        "purpose": "Redis 클라이언트 (rate limit, nonce)",
+        "purpose": "Redis 클라이언트 — rate-limit GCRA 버킷, nonce 중복 캐시",
     },
     # PII 분석 엔진
     {
         "name": "Microsoft Presidio (analyzer)",
-        "version": "2.2.362",
+        "version": "2.2.362 (pin: >=2.2.362)",
         "category": "PII Engine",
         "license": "MIT",
         "purpose": "PII 분석 프레임워크 — 정규식 인식기 등록/실행, decision_process 노출",
     },
     {
         "name": "spaCy",
-        "version": "3.8.14",
+        "version": "3.8.14 (pin: >=3.8)",
         "category": "PII Engine",
         "license": "MIT",
         "purpose": "한국어 NLP 토크나이저 (Phase 9E 이후 NER 미사용)",
     },
     {
         "name": "ko_core_news_lg",
-        "version": "3.8.0",
+        "version": "3.8.0 (spaCy 모델, 별도 설치)",
         "category": "PII Engine",
         "license": "MIT",
         "purpose": "한국어 spaCy 모델 (토크나이저로만 사용)",
@@ -863,169 +877,197 @@ _DEPENDENCIES: list[dict[str, str]] = [
     # 파일 추출
     {
         "name": "pypdfium2",
-        "version": ">=4.30",
+        "version": "5.7.1 (pin: >=4.30)",
         "category": "File Extraction",
         "license": "Apache-2.0/BSD-3-Clause",
-        "purpose": "PDF 텍스트/이미지 추출",
+        "purpose": "PDF 텍스트/이미지 추출 (스캔 PDF 페이지 렌더)",
     },
     {
         "name": "pdfplumber",
-        "version": ">=0.11",
+        "version": "0.11.9 (pin: >=0.11)",
         "category": "File Extraction",
         "license": "MIT",
-        "purpose": "PDF 표/레이아웃 분석",
+        "purpose": "PDF 표/레이아웃 분석 (텍스트 레이어 우선 추출)",
     },
     {
         "name": "python-docx",
-        "version": ">=1.1",
+        "version": "1.2.0 (pin: >=1.1)",
         "category": "File Extraction",
         "license": "MIT",
-        "purpose": "DOCX 텍스트 추출",
+        "purpose": "DOCX 텍스트 추출 (단락 + 표)",
+    },
+    {
+        "name": "openpyxl",
+        "version": "3.1.5 (pin: >=3.1)",
+        "category": "File Extraction",
+        "license": "MIT",
+        "purpose": "XLSX (SpreadsheetML) 셀 텍스트 추출 — Phase 4b 추가",
+    },
+    {
+        "name": "python-pptx",
+        "version": "1.0.2 (pin: >=1.0)",
+        "category": "File Extraction",
+        "license": "MIT",
+        "purpose": "PPTX (PresentationML) 슬라이드 텍스트 추출 — Phase 4b 추가",
     },
     {
         "name": "lxml",
-        "version": ">=5.0",
+        "version": "6.1.0 (pin: >=5.0)",
         "category": "File Extraction",
         "license": "BSD-3-Clause",
-        "purpose": "XML/HWPX 파싱",
+        "purpose": "XML/HWPX 직접 파싱 (별도 HWP 라이브러리 미사용)",
     },
     # OCR/이미지
     {
-        "name": "PaddleOCR (선택)",
-        "version": ">=2.8",
+        "name": "PaddleOCR",
+        "version": "3.5.0 (pin: >=2.8) — 기본 OCR 엔진",
         "category": "OCR",
         "license": "Apache-2.0",
-        "purpose": "한국어 OCR (paddle 엔진 사용 시)",
+        "purpose": "한국어 OCR (PP-OCRv5, CPU, in-process). `OCR_ENGINE=paddle` 기본값.",
     },
     {
-        "name": "PaddlePaddle (선택)",
-        "version": ">=2.6",
+        "name": "PaddlePaddle",
+        "version": "3.3.1 (pin: >=2.6)",
         "category": "OCR",
         "license": "Apache-2.0",
-        "purpose": "PaddleOCR 런타임",
+        "purpose": "PaddleOCR 런타임 (oneDNN 비활성화 — `enable_mkldnn=False`)",
     },
     {
         "name": "Pillow",
-        "version": "transitive",
+        "version": "12.2.0 (pin: >=10.0)",
         "category": "OCR",
         "license": "MIT-CMU",
-        "purpose": "OCR 입력 이미지 로딩/전처리",
+        "purpose": "OCR 입력 이미지 로딩/EXIF 회전/다운스케일",
     },
     # 보안/통신
     {
         "name": "httpx",
-        "version": ">=0.27",
+        "version": "0.28.1 (pin: >=0.27)",
         "category": "Security/Network",
         "license": "BSD-3-Clause",
-        "purpose": "비동기 HTTP 클라이언트 (첨부 fetch, 웹훅)",
+        "purpose": "비동기 HTTP 클라이언트 (첨부 fetch, webhook 송신, ASGI 인-프로세스 테스트)",
     },
     {
         "name": "clamd",
-        "version": ">=1.0.2",
+        "version": "1.0.2 (pin: >=1.0.2)",
         "category": "Security/Network",
         "license": "LGPL-3.0",
-        "purpose": "ClamAV 악성코드 스캐너 클라이언트",
+        "purpose": "ClamAV INSTREAM 클라이언트 (소프트 실패 허용)",
+    },
+    {
+        "name": "cryptography",
+        "version": "47.0.0 (pin: >=43.0)",
+        "category": "Security/Network",
+        "license": "Apache-2.0/BSD",
+        "purpose": "AES-256-GCM envelope 암호화 헬퍼 (`app/security/encryption.py`)",
     },
     {
         "name": "prometheus-client",
-        "version": ">=0.20",
+        "version": "0.25.0 (pin: >=0.20)",
         "category": "Observability",
         "license": "Apache-2.0",
-        "purpose": "Prometheus 메트릭 노출",
+        "purpose": "Prometheus 메트릭 노출 (`/v1/admin/metrics`)",
     },
     # CLI
     {
         "name": "Typer",
-        "version": ">=0.12",
+        "version": "0.24.2 (pin: >=0.12)",
         "category": "CLI",
         "license": "MIT",
-        "purpose": "API 키 관리 CLI",
+        "purpose": "API 키 / 패턴 관리 CLI (`python -m app.cli`)",
     },
     # 외부 시스템
     {
         "name": "PostgreSQL",
-        "version": "16",
+        "version": "16 (운영) / 17 호환",
         "category": "External System",
         "license": "PostgreSQL License",
-        "purpose": "주 데이터베이스 (pgcrypto AES 암호화)",
+        "purpose": "주 데이터베이스 (pgcrypto AES, append-only audit_events 트리거)",
     },
     {
         "name": "Redis",
         "version": "7",
         "category": "External System",
-        "license": "RSALv2/SSPL",
-        "purpose": "rate limit + nonce 캐시",
+        "license": "RSALv2/SSPL (사내 자체 호스팅 — 외부 송출 없음)",
+        "purpose": "rate-limit + nonce 캐시",
     },
     {
         "name": "ClamAV",
-        "version": "1.3",
+        "version": "1.3 (TCP 3310)",
         "category": "External System",
         "license": "GPL-2.0",
         "purpose": "첨부 파일 악성코드 스캔",
     },
     {
-        "name": "vLLM (Qwen3.5-27B-VL)",
-        "version": "external",
+        "name": "vLLM (Qwen3.5-VL)",
+        "version": "external (OCR 폴백 / 옵트인)",
         "category": "External System",
         "license": "Apache-2.0",
-        "purpose": "VLM OCR 엔드포인트",
+        "purpose": "`OCR_ENGINE=vlm` 또는 Paddle 예외 시 자동 폴백 (사내 GPU 서버)",
     },
     # 개발 도구
     {
         "name": "Ruff",
-        "version": ">=0.7",
+        "version": "0.15.12 (pin: >=0.7)",
         "category": "Dev Tooling",
         "license": "MIT",
-        "purpose": "린터/포매터",
+        "purpose": "린터/포매터 (CI 게이트)",
     },
     {
         "name": "mypy",
-        "version": ">=1.13",
+        "version": "1.20.2 (pin: >=1.13)",
         "category": "Dev Tooling",
         "license": "MIT",
-        "purpose": "타입 체커 (strict)",
+        "purpose": "타입 체커 (strict, CI 게이트)",
     },
     {
         "name": "bandit",
-        "version": ">=1.8",
+        "version": "1.9.4 (pin: >=1.8, extras: [toml])",
         "category": "Dev Tooling",
         "license": "Apache-2.0",
         "purpose": "보안 정적 분석",
     },
     {
         "name": "pip-audit",
-        "version": ">=2.7",
+        "version": "2.10.0 (pin: >=2.7)",
         "category": "Dev Tooling",
         "license": "Apache-2.0",
         "purpose": "의존성 취약점 스캔",
     },
     {
         "name": "pytest",
-        "version": ">=8.3",
+        "version": "9.0.3 (pin: >=8.3)",
         "category": "Dev Tooling",
         "license": "MIT",
         "purpose": "테스트 러너",
     },
     {
         "name": "pytest-asyncio",
-        "version": ">=0.24",
+        "version": "1.3.0 (pin: >=0.24)",
         "category": "Dev Tooling",
         "license": "Apache-2.0",
         "purpose": "asyncio 테스트 지원",
     },
     {
         "name": "Locust",
-        "version": ">=2.30",
+        "version": "2.43.4 (pin: >=2.30)",
         "category": "Dev Tooling",
         "license": "MIT",
-        "purpose": "부하 테스트",
+        "purpose": "부하 테스트 (`tests/load/`)",
     },
     {
         "name": "pre-commit",
-        "version": ">=4.0",
+        "version": "4.6.0 (pin: >=4.0)",
         "category": "Dev Tooling",
         "license": "MIT",
         "purpose": "pre-commit 훅 관리",
+    },
+    {
+        "name": "reportlab",
+        "version": "4.5.0 (pin: >=4.0, dev only)",
+        "category": "Dev Tooling",
+        "license": "BSD-3-Clause",
+        "purpose": "합성 PDF / 스캔 PDF 픽스처 생성 (테스트 전용)",
     },
     # 컨테이너/배포
     {
@@ -1160,6 +1202,27 @@ async def _ensure_dashboard_test_key() -> tuple[str, str]:
         return new_row.key_id, new_secret
 
 
+DASHBOARD_TEST_OCR_PAGE_LIMIT = 2
+DASHBOARD_TEST_CALLBACK_TIMEOUT_SECONDS = 90.0
+DASHBOARD_TEST_MAX_ATTACHMENTS = 3
+DASHBOARD_TEST_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20 MB per file
+DASHBOARD_TEST_ALLOWED_MIME = frozenset(
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "image/png",
+        "image/jpeg",
+        "image/tiff",
+        "image/bmp",
+        "image/webp",
+        "image/gif",
+        "text/plain",
+    }
+)
+
+
 @router.post("/test", response_class=HTMLResponse)
 async def test_submit(
     request: Request,
@@ -1167,23 +1230,29 @@ async def test_submit(
     body: str = Form(""),
     strictness: str = Form("medium"),
     author_ip: str = Form("203.0.113.5"),
+    attachments: list[UploadFile] | None = File(default=None),  # noqa: B008
     _session_id: str = Depends(get_dashboard_session),
 ) -> Response:
     """검사 테스트 — 일반 API ``/v1/detect/post`` 흐름을 그대로 재사용한다.
 
-    Phase 9J — 이전 구현은 분석 엔진을 직접 호출하여 audit/idempotency/응답
-    정책 미들웨어를 모두 우회했다. 그 결과 검사 테스트가 사용 이력/차단
-    내역에 남지 않았다. 본 핸들러는 httpx ``ASGITransport`` 로 같은 프로세스의
-    FastAPI 앱을 호출하여 운영 호출과 동일한 흐름 (HMAC 검증, 응답 정책,
-    audit middleware) 을 거치도록 한다. 첨부는 ``fetch_url`` 메타 기반이라
-    검사 테스트로 시뮬레이션이 어려워 입력에서 제외한다.
+    본문 + 첨부파일을 함께 받아 운영 비동기 흐름을 같은 프로세스 안에서
+    재현한다. 업로드 파일은 token-키드 in-memory staging 에 보관되어
+    내부 ``/admin/test/_fetch`` 엔드포인트로 워커가 다시 끌어가고, 워커가
+    ``/admin/test/_callback`` 으로 보낸 webhook payload 를 핸들러가
+    asyncio.Event 로 기다렸다가 화면에 반영한다. ``/admin/test`` 전용으로
+    OCR 페이지 한도는 2 페이지로 강제된다 — 즉석 테스트로 100+ 페이지 스캔
+    PDF 가 들어와도 Paddle 이 폭주하지 않게 막는다.
     """
+    import asyncio as _asyncio
+    import hashlib as _hashlib
     import json as _json
     import time as _time
     import uuid as _uuid
 
     import httpx
 
+    from app.api import dashboard_test_runtime as _dtr
+    from app.extractors.ocr import set_max_ocr_pages_override
     from app.main import app as _fastapi_app
     from app.security.hmac_auth import compute_signature
 
@@ -1192,35 +1261,117 @@ async def test_submit(
     error: str | None = None
     envelope: dict[str, Any] = {}
     http_status = 0
+    attachment_results: list[dict[str, Any]] = []
+    callback_payload: dict[str, Any] | None = None
+    callback_received = False
+    callback_timed_out = False
+
+    raw_attachments: list[UploadFile] = [u for u in (attachments or []) if u and u.filename]
+
+    form_view = {
+        "title": title,
+        "body": body,
+        "strictness": strictness,
+        "author_ip": author_ip,
+    }
+
+    def _render(result: dict[str, Any]) -> Response:
+        return templates.TemplateResponse(
+            request,
+            "admin/test.html",
+            {"result": result, "form": form_view},
+        )
+
+    if len(raw_attachments) > DASHBOARD_TEST_MAX_ATTACHMENTS:
+        return _render(
+            {
+                "envelope": {},
+                "http_status": 0,
+                "error": (
+                    f"첨부파일은 최대 {DASHBOARD_TEST_MAX_ATTACHMENTS}개까지 업로드할 수 있습니다."
+                ),
+                "elapsed_ms": int((_time.perf_counter() - started) * 1000),
+                "strictness": strictness,
+                "author_ip": author_ip,
+            }
+        )
 
     try:
         key_id, secret = await _ensure_dashboard_test_key()
     except Exception as e:
         error = f"검사 테스트용 API 키 준비 실패: {e}"
         logger.warning("dashboard test key bootstrap failed: %s", e)
-        elapsed_ms = int((_time.perf_counter() - started) * 1000)
-        return templates.TemplateResponse(
-            request,
-            "admin/test.html",
+        return _render(
             {
-                "result": {
-                    "envelope": {},
-                    "http_status": 0,
-                    "error": error,
-                    "elapsed_ms": elapsed_ms,
-                    "strictness": strictness,
-                    "author_ip": author_ip,
-                },
-                "form": {
-                    "title": title,
-                    "body": body,
-                    "strictness": strictness,
-                    "author_ip": author_ip,
-                },
-            },
+                "envelope": {},
+                "http_status": 0,
+                "error": error,
+                "elapsed_ms": int((_time.perf_counter() - started) * 1000),
+                "strictness": strictness,
+                "author_ip": author_ip,
+            }
         )
 
-    payload = {
+    # ── Stage uploads in a session-scoped, token-keyed buffer ────────────
+    session = await _dtr.create_session()
+    attachment_models: list[dict[str, Any]] = []
+    base_url = str(request.base_url).rstrip("/")
+    for upload in raw_attachments:
+        data = await upload.read()
+        if len(data) == 0:
+            continue
+        upload_name = upload.filename or "unnamed.bin"
+        if len(data) > DASHBOARD_TEST_MAX_ATTACHMENT_BYTES:
+            await _dtr.end_session(session.token)
+            return _render(
+                {
+                    "envelope": {},
+                    "http_status": 0,
+                    "error": f"파일 '{upload_name}' 가 한도(20 MB)를 초과합니다.",
+                    "elapsed_ms": int((_time.perf_counter() - started) * 1000),
+                    "strictness": strictness,
+                    "author_ip": author_ip,
+                }
+            )
+        mime = upload.content_type or "application/octet-stream"
+        if mime not in DASHBOARD_TEST_ALLOWED_MIME:
+            await _dtr.end_session(session.token)
+            return _render(
+                {
+                    "envelope": {},
+                    "http_status": 0,
+                    "error": (
+                        f"'{upload_name}' MIME 유형 '{mime}' 은 검사 테스트에서 허용되지 않습니다."
+                    ),
+                    "elapsed_ms": int((_time.perf_counter() - started) * 1000),
+                    "strictness": strictness,
+                    "author_ip": author_ip,
+                }
+            )
+        att_id = f"att_{_uuid.uuid4().hex[:8]}"
+        digest = _hashlib.sha256(data).hexdigest()
+        session.files[att_id] = _dtr.StagedFile(
+            attachment_id=att_id,
+            filename=upload_name,
+            mime_type=mime,
+            data=data,
+            sha256=digest,
+        )
+        fetch_url = f"{base_url}/admin/test/_fetch/{session.token}/{att_id}"
+        attachment_models.append(
+            {
+                "attachment_id": att_id,
+                "filename": upload_name,
+                "size_bytes": len(data),
+                "mime_type": mime,
+                "sha256": digest,
+                "fetch_url": fetch_url,
+            }
+        )
+
+    callback_url = f"{base_url}/admin/test/_callback/{session.token}"
+
+    payload: dict[str, Any] = {
         "request_id": str(_uuid.uuid4()),
         "author": {
             "name": "dashboard-test",
@@ -1233,6 +1384,10 @@ async def test_submit(
         },
         "options": {"strictness": strictness},
     }
+    if attachment_models:
+        payload["attachments"] = attachment_models
+        payload["callback_url"] = callback_url
+
     body_bytes = _json.dumps(
         payload,
         separators=(",", ":"),
@@ -1256,6 +1411,10 @@ async def test_submit(
         "X-Signature": signature,
     }
 
+    # OCR cap is per-context; setting it before the ASGI call lets the
+    # spawned attachment-processor task inherit it via contextvars.
+    set_max_ocr_pages_override(DASHBOARD_TEST_OCR_PAGE_LIMIT)
+
     try:
         transport = httpx.ASGITransport(app=_fastapi_app)
         async with httpx.AsyncClient(
@@ -1272,15 +1431,52 @@ async def test_submit(
                 envelope = r.json()
             except Exception:
                 envelope = {"raw": r.text}
+
+        # Case C: 202 ACK-3001 — the worker fan-out is in-flight. Wait
+        # for the webhook callback (or time out gracefully).
+        if http_status == 202 and attachment_models:
+            try:
+                await _asyncio.wait_for(
+                    session.callback_event.wait(),
+                    timeout=DASHBOARD_TEST_CALLBACK_TIMEOUT_SECONDS,
+                )
+                callback_received = True
+                callback_payload = session.callback_payload
+            except TimeoutError:
+                callback_timed_out = True
+                logger.warning(
+                    "dashboard test callback timed out after %.0fs (token=%s)",
+                    DASHBOARD_TEST_CALLBACK_TIMEOUT_SECONDS,
+                    session.token,
+                )
     except Exception as e:
         error = f"API 호출 실패: {e}"
         logger.warning("test_submit api call failed: %s", e)
+    finally:
+        # Drop the override + staged buffers so background tasks from
+        # other requests see the production defaults again.
+        set_max_ocr_pages_override(None)
+        await _dtr.end_session(session.token)
 
     elapsed_ms = int((_time.perf_counter() - started) * 1000)
 
-    # 응답 envelope 에서 화면용 view-model 추출
+    # ── 본문 탐지 추출 ────────────────────────────────────────────────────
+    body_envelope: dict[str, Any]
+    if envelope.get("body_result"):
+        body_envelope = {
+            "verdict": envelope["body_result"].get("verdict"),
+            "code": envelope["body_result"].get("code"),
+            "detections": envelope["body_result"].get("detections", []),
+        }
+    else:
+        body_envelope = {
+            "verdict": envelope.get("verdict"),
+            "code": envelope.get("code"),
+            "detections": envelope.get("detections", []),
+        }
+
     detections: list[dict[str, Any]] = []
-    for d in envelope.get("detections", []) or []:
+    for d in body_envelope.get("detections") or []:
         if not isinstance(d, dict):
             continue
         detections.append(
@@ -1295,29 +1491,133 @@ async def test_submit(
             }
         )
 
+    # ── 첨부 결과 (callback payload) 추출 ────────────────────────────────
+    if callback_payload:
+        for entry in callback_payload.get("attachment_results", []) or []:
+            if not isinstance(entry, dict):
+                continue
+            entry_dets: list[dict[str, Any]] = []
+            for d in entry.get("detections") or []:
+                if not isinstance(d, dict):
+                    continue
+                entry_dets.append(
+                    {
+                        "field": d.get("field"),
+                        "entity_type": d.get("entity_type"),
+                        "code": d.get("code"),
+                        "score": d.get("score"),
+                        "start": d.get("start"),
+                        "end": d.get("end"),
+                        "verdict": _verdict_for_code(str(d.get("code") or "")),
+                    }
+                )
+            attachment_results.append(
+                {
+                    "attachment_id": entry.get("attachment_id"),
+                    "filename": entry.get("filename"),
+                    "verdict": entry.get("verdict"),
+                    "code": entry.get("code"),
+                    "detections": entry_dets,
+                }
+            )
+
+    # ── 최종 verdict / code 결정 ──────────────────────────────────────────
+    final_verdict = envelope.get("verdict")
+    final_code = envelope.get("code")
+    final_user_message = envelope.get("user_message")
+    if callback_payload:
+        # The worker's webhook is the authoritative final state for
+        # async jobs; surface it instead of the 202 ACK-3001 envelope.
+        final_verdict = callback_payload.get("verdict") or final_verdict
+        final_code = callback_payload.get("code") or final_code
+        final_user_message = callback_payload.get("user_message") or final_user_message
+
     result = {
         "envelope": envelope,
+        "callback_envelope": callback_payload,
+        "callback_received": callback_received,
+        "callback_timed_out": callback_timed_out,
+        "callback_url": callback_url if attachment_models else None,
+        "ocr_page_limit": DASHBOARD_TEST_OCR_PAGE_LIMIT,
         "http_status": http_status,
-        "verdict": envelope.get("verdict"),
-        "code": envelope.get("code"),
-        "user_message": envelope.get("user_message"),
+        "verdict": final_verdict,
+        "code": final_code,
+        "user_message": final_user_message,
         "developer_message": envelope.get("developer_message"),
         "system_message": envelope.get("system_message"),
         "request_id": envelope.get("request_id"),
         "processing_ms": envelope.get("processing_ms"),
         "processed_at": envelope.get("processed_at"),
         "detections": detections,
+        "attachment_inputs": [
+            {
+                "attachment_id": a["attachment_id"],
+                "filename": a["filename"],
+                "size_bytes": a["size_bytes"],
+                "mime_type": a["mime_type"],
+            }
+            for a in attachment_models
+        ],
+        "attachment_results": attachment_results,
         "error": error,
         "elapsed_ms": elapsed_ms,
         "strictness": strictness,
         "author_ip": author_ip,
     }
-    form = {"title": title, "body": body, "strictness": strictness, "author_ip": author_ip}
-    return templates.TemplateResponse(
-        request,
-        "admin/test.html",
-        {"result": result, "form": form},
+    return _render(result)
+
+
+# ── 검사 테스트 전용 내부 엔드포인트 ──────────────────────────────────────
+@router.get("/test/_fetch/{token}/{attachment_id}")
+async def dashboard_test_fetch(token: str, attachment_id: str) -> Response:
+    """워커가 ``Attachment.fetch_url`` 로 호출 — staged 바이트를 그대로 응답."""
+    from app.api import dashboard_test_runtime as _dtr
+
+    session = _dtr.get_session(token)
+    if session is None:
+        raise HTTPException(status_code=404, detail="test session not found")
+    staged = session.files.get(attachment_id)
+    if staged is None:
+        raise HTTPException(status_code=404, detail="attachment not staged")
+    # HTTP headers default to latin-1 — Korean filenames blow up if we
+    # naively interpolate them. Use RFC 5987 (filename*) and an ASCII
+    # fallback so both Starlette and curious humans can read the name.
+    from urllib.parse import quote as _urlquote
+
+    safe_ascii = staged.filename.encode("ascii", "replace").decode("ascii")
+    return Response(
+        content=staged.data,
+        media_type=staged.mime_type,
+        headers={
+            "Content-Disposition": (
+                f"inline; filename=\"{safe_ascii}\"; filename*=UTF-8''{_urlquote(staged.filename)}"
+            ),
+            "Cache-Control": "no-store",
+        },
     )
+
+
+@router.post("/test/_callback/{token}")
+async def dashboard_test_callback(token: str, request: Request) -> JSONResponse:
+    """워커가 ``callback_url`` 로 보낸 webhook payload 를 받아 핸들러를 깨운다."""
+    from app.api import dashboard_test_runtime as _dtr
+
+    session = _dtr.get_session(token)
+    if session is None:
+        # The session may have already been cleaned up (handler timeout
+        # or operator navigated away) — accept the body but no-op so
+        # the worker doesn't retry against a phantom URL.
+        return JSONResponse({"ok": True, "note": "session expired"})
+    try:
+        payload = await request.json()
+    except Exception as e:
+        logger.warning("dashboard test callback parse failed: %s", e)
+        raise HTTPException(status_code=400, detail="invalid json") from e
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="payload must be object")
+    session.callback_payload = payload
+    session.callback_event.set()
+    return JSONResponse({"ok": True})
 
 
 # ── Audit 상세 보기 ────────────────────────────────────────────────────────

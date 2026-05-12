@@ -1,4 +1,21 @@
-"""FastAPI application entrypoint."""
+"""FastAPI 애플리케이션 진입점.
+
+이 모듈은 다음을 책임진다:
+
+- `FastAPI` 인스턴스 생성 + Swagger/OpenAPI 메타데이터 (`title`, `description`,
+  `version`, `tags`, contact, license) 구성
+- 미들웨어 체인 등록 — `BodySizeLimitMiddleware` (1 MiB 한도) → `AuditMiddleware`
+  (append-only 감사 로그) → require_auth dependency (라우터별)
+- 백그라운드 워커 (`lifespan`) — nonce vacuum / job cleanup / audit GC /
+  feedback alerter 4개. `APP_ENV=test` 일 때는 비활성.
+- 라우터 마운트 — 외부 API (`/v1/detect`, `/v1/jobs`, `/v1/feedback`,
+  `/v1/legal`) + 헬스 + 운영자 (`/admin/*`, `/v1/admin/*`)
+- 전역 예외 핸들러 — `RequestValidationError` 를 REQ-4xxx 응답 envelope 로
+  변환, `EnvelopeHTTPException` 을 flat envelope 로 변환 (`{"detail": ...}`
+  래핑 없음)
+
+운영 환경에서는 `uvicorn app.main:app --host 0.0.0.0 --port 9000` 으로 실행.
+"""
 
 from __future__ import annotations
 
@@ -77,10 +94,105 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 await t
 
 
+# ── OpenAPI 메타데이터 ────────────────────────────────────────────────────
+# Swagger UI (`/docs`) / ReDoc (`/redoc`) 가 자동 생성하는 페이지를 풍부화
+# 한다. 외부 클라이언트 개발자가 Swagger 만 보고도 호출이 가능하도록
+# description 에 핵심 흐름·인증 헤더·응답 코드 요약을 마크다운으로 적는다.
+_API_DESCRIPTION = """
+공공기관/기업 게시판에 글이 게시되기 전 본문·첨부파일에서 **개인정보(PII)**
+를 식별하고 차단하는 self-hosted REST API.
+
+## 핵심 흐름
+
+| 사례 | 조건 | HTTP | 응답 시점 |
+|------|------|------|----------|
+| **Case A** | 본문에 BLOCK 급 PII | 200 | 즉시 — 첨부 검사 생략 |
+| **Case B** | 본문 PASS, 첨부 없음 | 200 | 즉시 |
+| **Case C** | 본문 PASS, 첨부 있음 | 202 | 즉시 (`ACK-3001`) + 워커가 webhook 으로 회신 |
+
+## 인증 (모든 `/v1/*` 엔드포인트 공통)
+
+요청마다 다음 4개 헤더가 필요합니다 (`X-Api-Key` / `X-Timestamp` / `X-Nonce` /
+`X-Signature`). canonical 형식:
+
+```
+{timestamp}\\n{nonce}\\n{METHOD}\\n{path}\\n{sha256_hex(body)}
+```
+
+상세 — [`docs/api_integration.md`](https://github.com/idjung96/open_pii_filter/blob/main/docs/api_integration.md).
+
+## 탐지 엔진
+
+Microsoft Presidio + spaCy `ko_core_news_lg` + 커스텀 한국어 인식기
+(주민등록번호 / 운전면허 / 여권 / 사업자번호 / 전화 / 이메일 / 카드 / 계좌).
+첨부 OCR 은 **PaddleOCR PP-OCRv5 (CPU)** 기본, 사내 vLLM 폴백 (옵트인).
+
+## 보안
+
+- HMAC-SHA256 + ±5분 timestamp + nonce 재사용 차단 (10분)
+- IP allowlist (외부 `:443` / 관리자 `:8443` 신뢰영역 분리)
+- append-only `audit_events` (BEFORE UPDATE/DELETE 트리거, 1년 보존)
+- 평문 PII 는 로그·메트릭·트레이스·DB 어디에도 저장되지 않습니다.
+""".strip()
+
+_OPENAPI_TAGS: list[dict[str, str]] = [
+    {
+        "name": "detect",
+        "description": "PII 검사 — 본문/제목/첨부에서 개인정보 식별 후 PASS/BLOCK 판정.",
+    },
+    {
+        "name": "jobs",
+        "description": "Case C 비동기 작업 상태 조회 / 폐기 — 완료 후 24h 보존.",
+    },
+    {
+        "name": "feedback",
+        "description": "사용자 오탐/미탐 제보 — 운영자 모니터링과 정책 튜닝에 사용.",
+    },
+    {
+        "name": "legal",
+        "description": "공개 개인정보처리방침 (운영자 결정 D, 인증 불요).",
+    },
+    {
+        "name": "health",
+        "description": "쿠버네티스 liveness/readiness probe — 인증 불요.",
+    },
+    {
+        "name": "admin",
+        "description": "운영자 전용 — Prometheus 메트릭·감사 조회·통계·deny-list 관리. "
+        "`admin_ip_allowlist` 가 비어 있으면 라우터가 마운트되지 않아 외부에는 404.",
+    },
+    {
+        "name": "dashboard",
+        "description": "Jinja2 운영자 대시보드 (`/admin/*`) — 세션 쿠키 + IP allowlist 기반. "
+        "HMAC `/v1/admin/*` 와는 독립 게이트.",
+    },
+]
+
 app = FastAPI(
-    title="PII Detection & Masking API",
+    title="Open PII Filter",
     version="0.1.0",
-    description="기관 대표홈페이지 게시판용 개인정보 탐지·마스킹 API",
+    description=_API_DESCRIPTION,
+    summary="한국어 게시판용 PII 사전 차단 REST API",
+    contact={
+        "name": "Open PII Filter 운영팀",
+        "url": "https://github.com/idjung96/open_pii_filter",
+    },
+    license_info={
+        "name": "GPL-3.0-or-later",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    },
+    openapi_tags=_OPENAPI_TAGS,
+    swagger_ui_parameters={
+        # 1) Swagger UI 에서 endpoint 를 alpha 순으로 정렬 — 카탈로그형
+        #    문서 가독성 우선 (HTTP 메서드 그룹핑보다 이름 정렬이 외부
+        #    개발자에게 더 직관적이라는 운영자 결정).
+        "operationsSorter": "alpha",
+        "tagsSorter": "alpha",
+        # 2) 첨부 검사용 multipart 시도 시 try-it-out 사용 가능.
+        "tryItOutEnabled": True,
+        # 3) 응답 페이로드의 한글이 깨지지 않도록 monospace 가독성 강화.
+        "syntaxHighlight": {"theme": "obsidian"},
+    },
     lifespan=lifespan,
 )
 
@@ -166,24 +278,51 @@ if get_settings().admin_ip_allowlist.strip():
     app.include_router(admin_blocklist_router)
 
 
-@app.get("/healthz")
+@app.get(
+    "/healthz",
+    tags=["health"],
+    summary="Liveness probe",
+    description="프로세스가 살아있는지만 확인 — 의존 시스템 (DB/Redis/ClamAV) 상태는 보지 않음. "
+    "쿠버네티스/LB liveness 용. 인증 불요.",
+)
 async def healthz() -> dict[str, str]:
-    """Liveness probe."""
+    """Liveness probe — 서비스 프로세스 가동 여부만 확인.
+
+    LB/오케스트레이터가 빈번하게 polling 하므로 페이로드를 최소로 유지하고
+    어떤 의존성도 만지지 않는다 (의존성 상태는 `/readyz` 가 담당).
+    """
     return {"status": "ok"}
 
 
-@app.get("/v1/healthz")
+@app.get(
+    "/v1/healthz",
+    tags=["health"],
+    summary="Liveness probe (v1)",
+    description="`/healthz` 와 동일하지만 응답에 `env` (예: `dev`/`stage`/`prod`) 라벨 포함. "
+    "운영자가 LB 로그만 보고도 어느 환경의 호출인지 식별 가능.",
+)
 async def v1_healthz() -> dict[str, str]:
-    """Versioned liveness probe — reports current environment label."""
+    """버전드 liveness probe — 응답에 `env` 라벨을 포함해 환경 식별 가능."""
     settings = get_settings()
     return {"status": "ok", "env": settings.app_env}
 
 
-# ── Request validation → REQ-4xxx envelope ────────────────────────────────
+# ── 요청 검증 실패 → REQ-4xxx envelope 변환 ──────────────────────────────
+# pydantic 의 기본 422 응답 (`{"detail": [...]}`) 대신 운영 친화적인 REQ-4xxx
+# 코드와 한국어 user_message 가 들어간 envelope 로 바꿔준다. 클라이언트는
+# 응답 `code` 만 보고 어느 필드가 어떻게 깨졌는지 즉시 식별 가능.
 def _classify_validation(
     errors: list[dict[str, Any]],
 ) -> tuple[str, dict[str, object]]:
-    """Pick the most specific REQ-* code for a pydantic validation failure."""
+    """pydantic 검증 실패 정보로부터 가장 구체적인 REQ-4xxx 코드를 고른다.
+
+    매핑 우선순위 (위에서 아래로):
+      - UUID 형식 위반 → `REQ-4004`
+      - JSON 파싱 실패 → `REQ-4003`
+      - 필수 필드 누락 → `REQ-4001` (어느 필드인지 `fields=...` 로 안내)
+      - `author.*` 필드 형식 오류 → `REQ-4002`
+      - 그 외 → `REQ-4003` 일반 검증 오류
+    """
     error_types = {str(e.get("type", "")) for e in errors}
     locs = [list(e.get("loc", ())) for e in errors]
 

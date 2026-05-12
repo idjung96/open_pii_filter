@@ -1,27 +1,39 @@
-"""HMAC-SHA256 signature verification (Phase 3, T3.1~T3.4).
+"""HMAC-SHA256 서명 검증 (Phase 3, T3.1~T3.4).
 
-Headers
--------
-- ``X-API-Key``    : public ``key_id`` from ``pii.api_keys``
-- ``X-Timestamp``  : UNIX seconds (UTC); window is ±5 minutes
-- ``X-Nonce``      : 16+ char random string, single-use within window
-- ``X-Signature``  : hex-encoded HMAC-SHA256 of the canonical string
+이 모듈은 외부 호출자가 모든 `/v1/*` 엔드포인트에 보내야 하는 4종 헤더의
+검증 로직을 담는다. `compute_signature()` 는 클라이언트 측에서도 그대로
+사용 가능 (docs/api_integration.md 의 샘플 코드 참고).
+
+필수 헤더 4종
+-------------
+- ``X-API-Key``    : 발급된 공개 식별자 (`pii.api_keys.key_id`)
+- ``X-Timestamp``  : UNIX 초 (UTC). 서버 시각 기준 ±5분 윈도우.
+- ``X-Nonce``      : 16자 이상 임의 문자열. 윈도우 안에서 1회만 사용 가능.
+- ``X-Signature``  : 아래 canonical string 의 HMAC-SHA256 hex digest.
 
 Canonical string
 ----------------
-Constructed as::
+::
 
     {timestamp}\\n{nonce}\\n{METHOD}\\n{PATH}\\n{sha256_hex(body)}
 
-A digest of the body — not the body itself — is included so the canonical
-string stays bounded regardless of payload size. The verifier performs
-constant-time comparison of the resulting digest against ``X-Signature``.
+body 의 원본이 아니라 SHA-256 digest 를 포함시켜 canonical string 의 크기를
+페이로드 크기와 무관하게 일정하게 유지한다. 서명 비교는 timing-safe
+constant-time (`hmac.compare_digest`) 으로 수행해 timing attack 방어.
 
-Replay defense
---------------
-Every accepted (key_id, nonce) pair is recorded in
-``pii.api_key_nonces``. A repeated submission within the timestamp
-window short-circuits to ``REQ-4013``.
+리플레이 방어
+-------------
+검증을 통과한 `(key_id, nonce)` 쌍은 `pii.api_key_nonces` 테이블에 기록된다.
+타임스탬프 윈도우 안에서 같은 쌍이 다시 들어오면 즉시 `REQ-4013` 으로 거절.
+nonce 행은 별도 vacuum 워커 (`nonce_vacuum_loop`) 가 윈도우를 벗어난 행을
+주기적으로 GC.
+
+실패 → 응답 코드 매핑
+---------------------
+- 헤더 누락 / 잘못된 key_id → REQ-4011 (401)
+- 서명 불일치 → REQ-4010 (401)
+- 타임스탬프 윈도우 외 → REQ-4012 (401)
+- nonce 재사용 → REQ-4013 (401)
 """
 
 from __future__ import annotations

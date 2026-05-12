@@ -1,24 +1,23 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 8 — failure injection (T8.3).
+"""Phase 8 — 의존 시스템 장애 주입 회귀 방지 (T8.3).
 
-Verifies graceful degradation when downstream dependencies fail:
+각 종속 인프라가 다운됐을 때 사용자 응답 수준에서의 graceful degradation
+정책을 검증한다:
 
-* PG down — caller sees a meaningful error envelope. The detect path
-  uses ``_resolve_runtime`` which already falls back to the in-memory
-  analyzer on DB failure (see ``app/api/detect.py``), so a body-only
-  detect call still returns 200 with the analyzer fallback. Audit + the
-  attachment-job persistence layer surface SVR-5xxx envelopes when DB
-  errors propagate beyond the fallback.
-* Redis down — rate limiter fails open (the per-IP burst check in
-  ``app/security/auth.py`` runs only on auth failure; under stub auth
-  the call still succeeds). The caller-rate-limit gate is best-effort.
-* Encryption key missing — ``app.security.encryption.get_cipher`` raises
-  ``EncryptionError`` on first use rather than at import, so the service
-  boots but any caller of ``encrypt_str`` gets a loud failure.
+* **PostgreSQL 다운** — `_resolve_runtime` 의 캐시 호출이 실패하면 in-memory
+  fallback 분석기 + 빈 정책 리스트로 자동 전환되어 본문-only detect 호출은
+  여전히 200 PASS 를 돌려준다. audit 행 기록 실패는 백그라운드에서 silent
+  drop 되고 서비스가 멈추지 않는다.
+* **Redis 다운** — rate-limit 게이트는 `require_auth` 경로에서만 발동하므로
+  stub 인증 하에서는 우회되어 200 응답이 유지된다. 즉 "rate-limit fail-open"
+  정책을 핀(pin).
+* **암호화 키 미설정** — `encrypt_str` 호출 시 즉시 `EncryptionError` (silent
+  실패 금지). 서비스 자체는 부팅하되 암호화가 필요한 경로는 큰 소리로 실패.
+* **`/readyz` DB ping 실패** → 503 + `degraded` status + 어떤 컴포넌트가
+  실패했는지 응답 본문에 표시. `/healthz` 는 의존성 무관 200 OK 유지.
 
-These tests use monkeypatch to simulate failure rather than tearing
-down real services. The goal is to assert the *user-visible behaviour*
-when the dependency is unavailable, not to test the dependency itself.
+monkeypatch 로 장애를 시뮬레이션 — 실제 서비스를 내리지 않고 사용자 가시
+동작만 검증한다.
 """
 
 from __future__ import annotations

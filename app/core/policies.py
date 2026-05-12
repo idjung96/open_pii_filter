@@ -1,20 +1,29 @@
-"""Strictness → band thresholds + entity→code mapping (§2.4, §1.2).
+"""Strictness 임계값 + (entity_type, band) → 응답 코드 매핑 (§2.4 / §1.2).
 
-Phase 9D — WARN 등급이 폐기되었다. 모든 임계값 이상 탐지는 BLOCK 으로 흡수
-된다. 이전 PASS/WARN/BLOCK 3-단계 → PASS/BLOCK 2-단계.
+Phase 9D 정리: WARN 등급은 폐기되어 모든 "임계값 이상" 탐지는 BLOCK 으로
+흡수된다 (이전 PASS / WARN / BLOCK 3단계 → PASS / BLOCK 2단계). WARN 코드는
+audit/legacy 호환을 위해 카탈로그에 남아 있지만 신규 응답에는 발생하지
+않는다.
 
-Two responsibilities:
-  1. ``score_to_band`` turns a confidence score into a verdict band
-     ("pass" | "block") given the requested strictness.
-  2. ``map_detection_to_code`` resolves (entity_type, band, field) into
-     the canonical response code from ``app/core/codes.py``.
+두 가지 책임:
 
-Strictness semantics:
-  - "low":    lenient — even moderate scores raise BLOCK
-  - "medium": balanced default
-  - "high":   strict — only very high scores raise BLOCK; weak
-              patterns (e.g., bare 10-14 digit "loose" bank accounts)
-              are pushed to PASS and dropped from the output.
+  1. ``score_to_band(score, strictness)`` — 분석기가 산출한 0.0~1.0 score 를
+     보고 PASS / BLOCK 중 어느 밴드인지 판정. 임계값은 strictness 별로 다름.
+  2. ``map_detection_to_code(entity_type, score, field, strictness)`` —
+     ``(entity_type, band)`` 를 ``app/core/codes.py`` 의 카탈로그 코드로
+     매핑. attachment.* field 는 entity 종류 무관 BLOCK-2010 으로 통합.
+
+Strictness 의미:
+
+  - **low**    — score ≥ 0.65 면 BLOCK. 오탐 ↓ / 미탐 ↑ — 자유게시판 등 게시
+                 자유도 우선 환경.
+  - **medium** — score ≥ 0.78 (기본값). 일반 게시판 권장.
+  - **high**   — score ≥ 0.88. 오탐 ↑ / 미탐 ↓ — 민원/법무 게시판 등 보호
+                 우선 환경. `KR_BANK_ACCOUNT_WEAK` 같은 약한 패턴은 임계
+                 미만으로 떨어져 PASS 로 분류된다.
+
+`ENTITY_TO_CODE` 매핑은 단일 진실 원천 — 새 인식기 추가 시 이 테이블에
+한 행 추가하면 즉시 전체 정책 매핑에 반영된다.
 """
 
 from __future__ import annotations

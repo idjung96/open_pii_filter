@@ -1,5 +1,13 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 7 — public privacy notice (operator-decision D)."""
+"""Phase 7 — 공개 개인정보처리방침 (`/v1/legal/privacy-notice`) 회귀 방지.
+
+운영자가 `Settings` 의 회사명·연락처 등을 채우면 마크다운 템플릿의
+`{{COMPANY_NAME}}` 같은 placeholder 가 그 값으로 치환되어 응답에 반영
+되고, 비어 있는 항목은 placeholder 그대로 남아 운영자가 누락을 알아
+챌 수 있도록 한다.
+
+또한 이 엔드포인트는 HMAC 인증 없이 공개 호출 가능해야 한다 (요구사항).
+"""
 
 from __future__ import annotations
 

@@ -32,6 +32,7 @@ from __future__ import annotations
 import io
 import logging
 import time
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -39,6 +40,21 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from app.config import get_settings
 from app.extractors.fetcher import ExtractionError
 from app.extractors.ocr_vlm import OCRBox, OCRResult, VLMError, vlm_ocr
+
+# When set in the current async context, ``ocr_pil_pages`` slices its
+# input list to the first N pages before running the engine. Used by
+# ``/admin/test`` so ad-hoc multipage scan PDFs stay cheap; left
+# ``None`` in production traffic.
+_max_pages_override: ContextVar[int | None] = ContextVar("ocr_max_pages_override", default=None)
+
+
+def set_max_ocr_pages_override(limit: int | None) -> None:
+    _max_pages_override.set(limit)
+
+
+def get_max_ocr_pages_override() -> int | None:
+    return _max_pages_override.get()
+
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage
@@ -187,7 +203,23 @@ async def ocr_pil_pages(images: list[PILImage], *, filename: str) -> OCRResult:
 
     Each page is OCR'd in turn; boxes are y-shifted so the same canvas
     coordinate system can be used for masked output stacking.
+
+    If a per-context ``max_ocr_pages`` override is set (see
+    :func:`set_max_ocr_pages_override`) the input list is sliced to the
+    first N pages before running the engine. This is used by
+    ``/admin/test`` to keep ad-hoc test runs from spinning Paddle on
+    every page of a multi-hundred-page scan; production traffic leaves
+    the override unset and processes every page.
     """
+    limit = _max_pages_override.get()
+    if limit is not None and len(images) > limit:
+        logger.info(
+            "ocr_pil_pages: capping %d pages → %d (filename=%s)",
+            len(images),
+            limit,
+            filename,
+        )
+        images = images[:limit]
     all_text: list[str] = []
     all_boxes: list[OCRBox] = []
     running_height = 0

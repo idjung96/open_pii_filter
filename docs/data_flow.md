@@ -182,11 +182,14 @@ AuditMiddleware
 | 대상 | 용도 | 데이터 | 인증 |
 |------|------|--------|------|
 | `attachments[*].fetch_url` | 첨부파일 fetch | HTTP GET | TLS, 호출자 통제 |
-| `callback_url` | webhook 콜백 | 탐지 결과 메타데이터 (PII 평문 X) | HMAC-SHA256 (`Settings.webhook_signing_secret`) |
+| `callback_url` | webhook 콜백 | 탐지 결과 메타데이터 (PII 평문 X) | HMAC-SHA256 (`Settings.webhook_signing_secret`), canonical = `{ts}\n{nonce}\n{POST}\n{path}\n{body_sha256}` |
 | ClamAV (`Settings.clamav_host:port`) | 악성코드 스캔 | 첨부 바이너리 (사내) | 사내 TCP |
-| VLM endpoint (`Settings.vlm_endpoint`) | OCR | 이미지 바이너리 (사내) | 사내 vLLM, API 키 옵션 |
+| (선택) VLM endpoint (`Settings.vlm_endpoint`) | OCR — `OCR_ENGINE=vlm` 일 때만 호출 | 이미지 바이너리 (사내) | 사내 vLLM, API 키 옵션 |
 
-외부 클라우드 서비스(OpenAI / Anthropic / Google 등)에 PII가 송출되는 경로는 존재하지 않습니다.
+기본 OCR 엔진은 **PaddleOCR PP-OCRv5 (CPU)** 로 in-process 동작합니다 — 외부 송출
+경로 없음 (`app/extractors/ocr_paddle.py`). VLM 은 `OCR_ENGINE=vlm` 으로 전환하거나
+Paddle 예외 시 자동 폴백할 때만 `Settings.vlm_endpoint` 로 호출되며, 사내 vLLM 외
+외부 클라우드(OpenAI / Anthropic / Google 등)에 PII가 송출되는 경로는 존재하지 않습니다.
 
 ---
 

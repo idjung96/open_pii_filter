@@ -1,12 +1,17 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 7 — admin stats endpoints (T7.5).
+"""Phase 7 — 운영자 stats 엔드포인트 회귀 방지 (T7.5).
 
-Covers:
-  - GET /v1/admin/stats/detections returns counts grouped by entity_type
-  - GET /v1/admin/stats/verdicts returns block/warn/pass ratios
-  - GET /v1/admin/stats/feedback returns counts grouped by original_code
-  - non-admin caller → 403 REQ-4015
-  - empty admin_ip_allowlist → router not mounted (404)
+운영 대시보드 / 보고서가 의존하는 5종 stats 엔드포인트의 응답 구조와
+권한 게이트를 검증한다:
+
+  - `GET /v1/admin/stats/detections` — entity_type 별 검출 카운트
+  - `GET /v1/admin/stats/verdicts` — block / warn / pass 비율
+  - `GET /v1/admin/stats/feedback` — 신고된 원본 코드 별 카운트
+  - 비-admin 호출 → 403 REQ-4015 (권한 분리)
+  - `admin_ip_allowlist` 가 비어 있으면 라우터 자체가 마운트되지 않아 404
+
+응답 키 (`buckets`, `total`, `by_code` 등) 가 운영자 보고서/Grafana 와
+계약 — 누락/이름 변경 시 시각화가 깨지므로 단단히 핀(pin).
 """
 
 from __future__ import annotations

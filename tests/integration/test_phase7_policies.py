@@ -1,14 +1,18 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 7 — DB-driven policy engine.
+"""Phase 7 — DB 주도 정책 엔진 회귀 방지.
 
-Covers:
-  T7.1 — RRN with score 0.95 → BLOCK + user_message
-  T7.2 — weak account-number policy = LOG_ONLY → caller sees PASS,
-         audit_events records the entity_type
-  T7.3 — adding a policy via add_policy hot-reloads (NOTIFY)
+`pii.pii_policies` 테이블에 정의된 (entity_type, score_band, action) 규칙이
+실시간 hot-reload 와 함께 응답에 반영되는지 검증한다:
 
-Phase 9E — T7.6 (shadow pattern) 테스트 제거. pii_patterns 인프라가
-폐기되어 mode='shadow' 패턴 등록 경로 자체가 사라졌다.
+  T7.1 — score 0.95 RRN → 정책 매핑이 BLOCK + user_message 정상
+  T7.2 — `KR_PHONE` 을 `LOG_ONLY` 로 강등하면 사용자에게는 PASS 가 보이고,
+         audit_events 의 `detected_entity_types` 에는 KR_PHONE 이 기록됨
+         (조용한 관찰 모드)
+  T7.3 — `add_policy()` 호출 후 정책 캐시 reload → 같은 입력이 BLOCK →
+         PASS 로 즉시 전환 (운영자가 재시작 없이 정책 변경 가능)
+
+Phase 9E 메모: T7.6 (shadow pattern) 은 `pii_patterns` 인프라 폐기로 함께
+제거. shadow 등록 경로 자체가 사라져 검증 대상이 없다.
 """
 
 from __future__ import annotations

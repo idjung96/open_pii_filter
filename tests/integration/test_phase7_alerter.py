@@ -1,11 +1,15 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 7 — feedback alerter (operator-decision A).
+"""Phase 7 — 피드백 알림 워커 (`feedback_alerter`) 회귀 방지.
 
-Covers:
-  - threshold-not-met → no email
-  - threshold-met → one email with subject containing the count
-  - SMTP misconfigured → no crash, WARNING logged
-  - alerter state table prevents double-alert in the same hour
+운영자에게 사용자 피드백 폭증을 알리는 SMTP 알림 워커의 4가지 핵심 동작:
+
+  - 임계 미달 → 메일 발송 안 함
+  - 임계 도달 → 1회 발송, 메일 subject 에 건수 포함
+  - SMTP 설정이 비어있으면 crash 없이 WARNING 로그 후 중단
+  - 같은 시간 내 중복 호출은 `alerter_state` 테이블이 차단 (anti-flap)
+
+알람이 폭주하거나 반대로 임계 도달인데 무음인 경우 둘 다 운영 사고로
+이어지므로 양방향 회귀를 모두 가드.
 """
 
 from __future__ import annotations

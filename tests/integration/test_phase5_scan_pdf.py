@@ -1,10 +1,13 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 5 scan-PDF auto-OCR routing tests.
+"""Phase 5 — 스캔 PDF 자동 OCR 라우팅 회귀 방지.
 
-Verifies that ``extract_pdf`` returning ``is_scan=True`` causes the
-dispatcher to render every PDF page via pypdfium2 and run OCR. Most
-assertions here use mocks so the test stays hermetic and fast; the
-end-to-end VLM path is exercised by ``test_phase5_ocr.py``.
+`extract_pdf` 가 `is_scan=True` 를 반환하면 dispatcher 가 pypdfium2 로 모든
+페이지를 렌더한 뒤 OCR 파이프라인 (`ocr_pil_pages`) 으로 보내고, 그 결과
+텍스트가 분석기까지 도달하는지 확인한다. 텍스트 레이어가 있는 PDF 는
+OCR 을 건너뛰어야 한다는 반대 케이스도 함께 핀(pin).
+
+대부분의 단언은 mock 기반으로 빠르고 결정적이며, 실 VLM 호출까지 포함한
+end-to-end 경로는 `test_phase5_ocr.py` 가 담당한다.
 """
 
 from __future__ import annotations
@@ -33,11 +36,17 @@ def _attachment(*, filename: str = "scan.pdf", mime_type: str = "application/pdf
     )
 
 
-# ── dispatch_extract on a scan PDF triggers OCR ──────────────────────────
+# ── dispatch_extract: 스캔 PDF → OCR 경로 사용 ──────────────────────────
 async def test_scan_pdf_routes_through_ocr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When extract_pdf reports is_scan=True the dispatcher must call OCR."""
+    """`is_scan=True` 일 때 dispatcher 가 OCR 까지 실행하고 RRN/전화번호를 추출.
+
+    `extract_pdf` 가 `("", True)` (빈 텍스트 + 스캔 플래그) 를 반환하도록
+    monkeypatch 한 뒤, 뒤따르는 `render_pdf_pages` + `ocr_pil_pages` 가
+    실제로 호출되어 OCR 결과 텍스트 (`900101-1234567`, `010-0000-1234`) 가
+    상위 호출자에게 전달되는지 확인.
+    """
     from PIL import Image
 
     fake_pages = [
@@ -74,8 +83,15 @@ async def test_scan_pdf_routes_through_ocr(
     fake_ocr.assert_awaited_once()
 
 
-# ── dispatch_extract on a text PDF skips OCR ──────────────────────────────
+# ── dispatch_extract: 텍스트 레이어 있는 PDF → OCR 우회 ────────────────
 async def test_text_pdf_skips_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """텍스트 레이어가 있는 PDF 는 OCR 단계가 호출되지 않아야 한다.
+
+    `extract_pdf` 가 텍스트 + `is_scan=False` 를 반환하면 더 비싼 OCR 경로
+    (`render_pdf_pages` / `ocr_pil_pages`) 가 절대 호출되면 안 된다. CPU /
+    Paddle 모델 로딩 비용 절약을 위해 매우 중요한 분기.
+    """
+
     async def fake_extract_pdf(_data: bytes, _filename: str) -> tuple[str, bool]:
         return "this is text", False
 

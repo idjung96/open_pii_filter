@@ -14,12 +14,19 @@ Format: YYMMDD-CXXXXXC where:
 
 from __future__ import annotations
 
+import datetime as _dt
 import re
 from typing import ClassVar
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
 from app.core.checksum import rrn_checksum
+
+# gender code → 출생년도 century 매핑.
+#   1, 2 → 19xx
+#   3, 4 → 20xx
+#   (5~8 외국인 코드는 별도 entity 가 담당 — 본 인식기는 [1-4] 만 매칭)
+_GENDER_TO_CENTURY: dict[str, int] = {"1": 1900, "2": 1900, "3": 2000, "4": 2000}
 
 
 class KrRrnRecognizer(PatternRecognizer):
@@ -48,19 +55,24 @@ class KrRrnRecognizer(PatternRecognizer):
         )
 
     def validate_result(self, pattern_text: str) -> bool | None:
-        """Confirm checksum + date are valid (True/False)."""
+        """체크섬 + 달력 정확성 (월별 일수 + 윤년 포함) 까지 검증.
+
+        오탐 방지를 위해 단순 ``1 <= day <= 31`` 검사가 아니라 실제 그 연/월의
+        ``datetime.date(year, month, day)`` 생성을 시도해 Feb 30, Feb 29 (평년)
+        같은 비유효 날짜를 모두 거절한다.
+        """
         digits = re.sub(r"\D", "", pattern_text)
         if len(digits) != 13:
             return False
         yy, mm, dd, c, rest = digits[0:2], digits[2:4], digits[4:6], digits[6], digits[7:13]
+        if c not in _GENDER_TO_CENTURY:
+            return False
+        century = _GENDER_TO_CENTURY[c]
         try:
-            month = int(mm)
-            day = int(dd)
+            # 달력 정확성 — month/day 의 모든 invalid 조합 (Feb 30, 비윤년의
+            # Feb 29, 4/6/9/11 월의 31일 등) 이 ValueError 로 떨어진다.
+            _dt.date(century + int(yy), int(mm), int(dd))
         except ValueError:
-            return False
-        if not (1 <= month <= 12 and 1 <= day <= 31):
-            return False
-        if c not in {"1", "2", "3", "4"}:
             return False
         first_twelve = yy + mm + dd + c + rest[:5]
         check = int(digits[12])

@@ -1,16 +1,15 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 8 — full end-to-end flow (T8.1).
+"""Phase 8 — 전체 end-to-end 흐름 회귀 방지 (T8.1).
 
-Drives the full request path against the in-process ASGI app:
+ASGI 인-프로세스 앱에 대해 운영 트래픽과 동일한 단계를 그대로 재현:
 
-* Issue an API key via ``app.security.api_key.issue_api_key``.
-* Sign a real HMAC envelope.
-* POST /v1/detect/post with body + one PDF attachment.
-* Wait for the async job to reach COMPLETED via /v1/jobs/{id}.
-* Verify the captured webhook payload includes the expected verdict.
-* Repeat the body-only happy path 50 times sequentially and assert the
-  average latency stays below 500 ms (relaxed from the spec 200 ms p50
-  to keep the test stable on shared CI hardware).
+* `issue_api_key()` 로 실제 API 키 발급 (DB에 row 생성)
+* 실제 HMAC envelope 서명
+* `POST /v1/detect/post` (본문 + PDF 첨부 1개)
+* `/v1/jobs/{id}` 폴링으로 비동기 잡이 COMPLETED 가 될 때까지 대기
+* 워커가 callback_url 로 보낸 webhook payload 가 캡처되는지 확인
+* 본문만 보내는 happy path 50회 반복하여 평균 지연 < 500 ms (스펙
+  200 ms p50 에서 CI 머신 노이즈 감안해 500 ms 로 완화)
 """
 
 from __future__ import annotations
@@ -43,7 +42,11 @@ def _install_transport(
     monkeypatch: pytest.MonkeyPatch,
     handler,  # type: ignore[no-untyped-def]
 ) -> None:
-    """Install a httpx.MockTransport so the worker's GET/POST go through it."""
+    """워커의 모든 httpx 호출 (fetch / webhook) 을 MockTransport 로 가로챈다.
+
+    실제 네트워크 호출 없이 첨부 다운로드와 webhook 전달을 시뮬레이션해
+    테스트가 결정적으로 돌아가게 한다.
+    """
     transport = httpx.MockTransport(handler)
     real_init = httpx.AsyncClient.__init__
 
@@ -115,13 +118,23 @@ def _flush_idempotency_cache() -> None:
     get_cache().clear()
 
 
-# ── T8.1: full async flow with attachment + webhook verification ──────────
+# ── T8.1: 첨부 + webhook 까지 포함한 비동기 전체 흐름 ───────────────────
 async def test_t8_1_full_async_flow_with_webhook(
     client_anon,
     e2e_key: tuple[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """End-to-end Case C: real HMAC + ASGI client + mocked webhook handler."""
+    """Case C — 실제 HMAC 인증 + ASGI 클라이언트 + 가짜 webhook 핸들러.
+
+    검증 단계:
+      1. 본문 + 첨부 PDF 로 `POST /v1/detect/post` 가 202 ACK-3001 반환
+      2. 워커가 fetch_url 로 PDF 를 받아 분석 후 COMPLETED 상태로 전이
+      3. `/v1/jobs/{id}` 폴링이 결국 COMPLETED 를 보고
+      4. 워커가 callback_url 로 webhook 을 POST — `webhook_calls` 에 캡처됨
+
+    이 흐름 중 한 단계라도 깨지면 운영 비동기 처리가 무력화되므로 가장
+    중요한 통합 회귀 가드.
+    """
     key_id, secret = e2e_key
     pdf = make_text_pdf()
     attachment = Attachment(
@@ -199,16 +212,18 @@ async def test_t8_1_full_async_flow_with_webhook(
     assert "callback.example.com" in captured["url"]
 
 
-# ── Repeated body-only happy path: latency budget ─────────────────────────
+# ── 본문만 보내는 happy path 50회 반복 — 지연 시간 예산 ─────────────────
 async def test_t8_1_body_only_latency_budget(
     client_anon,
     e2e_key: tuple[str, str],
 ) -> None:
-    """50 sequential body-only detect calls should average under 500 ms.
+    """본문만 50건 순차 호출했을 때 평균 지연 < 500 ms.
 
-    This is the spec body-detect SLA target (p50 200 ms / p95 1 s) with
-    headroom for shared CI noise. Each iteration uses a fresh request_id
-    + nonce so the idempotency cache and replay defence aren't hit.
+    스펙 SLA 는 p50 200 ms / p95 1 s 이지만 공유 CI 환경 노이즈를 감안해
+    평균 500 ms 로 완화한 헤드룸 가드. 매 호출마다 새 request_id + nonce 를
+    써서 멱등성 캐시·리플레이 방어가 우회되지 않도록 한다 (실제 회수만큼
+    분석기 핫패스를 두드림). 더 빡빡한 SLO 검증은 `docs/load_test_report.md`
+    의 운영자 산출물에서 별도 진행.
     """
     key_id, secret = e2e_key
     iterations = 50

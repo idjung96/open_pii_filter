@@ -1,8 +1,11 @@
-"""T2.6 — deny_list 100 employee names → all detected via build_analyzer_with_deny_list.
+"""T2.6 — deny-list 100명 직원명 전부 검출 회귀 방지.
 
-Builds a synthetic deny list of 100 made-up Korean names (3 char Hangul,
-non-real), inserts them into pii.pii_deny_list, builds an analyzer, and
-asserts every name is detected when embedded in a sentence.
+`build_analyzer_with_deny_list` 가 DB 의 deny-list 행을 모두 읽어 인식기에
+주입하고, 100건 모두를 본문 안에서 INTERNAL_NAME entity 로 잡아내는지
+검증한다. 2~3자 한글 음절을 무작위 합성 → 실재 인명과 충돌 가능성 회피.
+
+추가로 `KR_EMPLOYEE_ID` 같은 entity_type 별 deny 행이 INTERNAL_NAME 이
+아닌 자기 타입으로 잡히는지도 같이 확인 (타입 라우팅 회귀 방지).
 """
 
 from __future__ import annotations
@@ -33,7 +36,12 @@ def _generate_unique_names(count: int, *, seed: int = 20260425) -> list[str]:
 
 
 async def test_t2_6_100_deny_names_all_detected(db_session: AsyncSession) -> None:
-    """All 100 deny-listed names are detected as INTERNAL_NAME."""
+    """deny-list 의 100명 직원명이 모두 INTERNAL_NAME 으로 검출되어야 한다.
+
+    25명 단위로 한 문장에 모아 분석기에 흘려 누락 없이 잡히는지 확인.
+    하나라도 누락되면 빠진 이름의 처음 3개를 에러 메시지에 포함해 디버깅
+    실마리 제공.
+    """
     names = _generate_unique_names(100)
 
     for name in names:
@@ -66,7 +74,11 @@ async def test_t2_6_100_deny_names_all_detected(db_session: AsyncSession) -> Non
 async def test_t2_6_deny_recognizer_filters_by_entity(
     db_session: AsyncSession,
 ) -> None:
-    """A KR_PHONE deny entry must surface as KR_PHONE, not INTERNAL_NAME."""
+    """deny 행의 `entity_type` 컬럼이 detection 의 entity_type 으로 그대로 흘러야 한다.
+
+    `KR_EMPLOYEE_ID` 로 등록된 sentinel 값이 INTERNAL_NAME 이 아니라
+    KR_EMPLOYEE_ID 로 잡혀야 정책 매핑이 올바른 코드로 분기 가능.
+    """
     # Sentinel value chosen so it's distinct from any seeded regex.
     sentinel = "ZX" + "".join(random.choices(string.ascii_uppercase, k=8))
     await add_deny_entry(

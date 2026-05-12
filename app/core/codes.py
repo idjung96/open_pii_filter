@@ -1,15 +1,29 @@
-"""Response code catalog (§2.4).
+"""응답 코드 카탈로그 (§2.4).
 
-Codes are permanent identifiers: once assigned, a code is never reused or
-redefined. Adding new codes is allowed; changing the meaning of an existing
-code is not. Categories:
+이 모듈은 API 가 외부로 노출하는 모든 응답 코드의 단일 진실 원천이다.
+응답 envelope 의 `code` 필드는 항상 여기 정의된 식별자 중 하나로 떨어지며,
+클라이언트는 `code` 만 보고 분기 가능하도록 설계되었다.
 
-- OK-xxxx   : PASS (HTTP 200)
-- WARN-xxxx : WARN (HTTP 200, user confirmation recommended)
-- BLOCK-xxxx: BLOCK (HTTP 200, publish not allowed)
-- ACK-xxxx  : PROCESSING (HTTP 202, async queued)
-- REQ-xxxx  : client ERROR (HTTP 4xx)
-- SVR-xxxx  : server ERROR (HTTP 5xx)
+코드 정책 — **불변 식별자**:
+  - 한 번 발급된 코드의 의미는 **절대 재정의하지 않는다** (예: BLOCK-2001 이
+    오늘 RRN 이라면 영원히 RRN. 카탈로그 정리하면서 의미를 옮기지 말 것)
+  - 새 코드는 다음 빈 번호에 추가하면 되고 호환성 영향 없음
+  - 폐기된 코드도 카탈로그에 남겨둔다 (역사적 audit 행과의 호환)
+
+카테고리 → HTTP 매핑:
+  - `OK-xxxx`    → PASS / HTTP 200 (게시 허용)
+  - `WARN-xxxx`  → WARN / HTTP 200 — Phase 9D 폐기. 신규 발생하지 않음
+  - `BLOCK-xxxx` → BLOCK / HTTP 200 (게시 차단, user_message 안내)
+  - `ACK-xxxx`   → PROCESSING / HTTP 202 (Case C 비동기 시작)
+  - `REQ-xxxx`   → ERROR / HTTP 4xx (호출자 측 잘못)
+  - `SVR-xxxx`   → ERROR / HTTP 5xx (서버 측 잘못, `retryable=True` 가능)
+
+각 `ResponseCode` 는 다음을 포함:
+  - `http_status` — FastAPI 가 응답에 사용할 HTTP 코드
+  - `system_message` — 운영자/로그용 영문 메시지 (PII 미포함)
+  - `user_message_template` — 사용자 안내 한국어 (placeholder 치환 가능)
+  - `developer_message_template` — ERROR 카테고리만 채움 (§2.5 — PASS/BLOCK 에는 미노출)
+  - `retryable` — SVR-5xxx 가 클라이언트 측 backoff 재시도 안전한지 표시
 """
 
 from __future__ import annotations

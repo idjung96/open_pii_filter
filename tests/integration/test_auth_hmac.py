@@ -1,11 +1,20 @@
-"""Phase 3 — HMAC auth integration tests (T3.1~T3.6).
+"""Phase 3 — HMAC 인증 통합 테스트 회귀 방지 (T3.1~T3.6).
 
-Issues a fresh API key, then exercises every failure mode against
-``client_anon`` (which doesn't override require_auth).
+신규 API 키를 발급한 뒤 ``client_anon`` (require_auth 우회 없음) 으로 모든
+실패 경로를 검증한다. 보안 게이트가 의도된 코드와 매핑되는지 정확히 핀
+(pin) 해야 운영자가 응답 코드만 보고 즉시 원인 파악 가능.
 
-After Q1/Q3 follow-ups:
-- HMAC key is the plaintext secret (no SHA-256 wrapping)
-- Auth-failure response body is the flat envelope (no ``{"detail": ...}``)
+검증 경로:
+  - T3.1 — 정상 HMAC → 200
+  - T3.2 — 서명 위조 → 401 REQ-4010
+  - T3.3 — timestamp 5분+ 차이 → 401 REQ-4012
+  - T3.4 — 같은 (timestamp, nonce) 재전송 → 401 REQ-4013 (리플레이 방어)
+  - T3.5 — X-API-Key 누락 → 401 REQ-4011
+  - T3.6 — 폐기된 키 → 403 REQ-4014
+
+Q1/Q3 후속 결정 메모:
+- HMAC 키는 평문 시크릿 (SHA-256 wrapping 없음)
+- 인증 실패 응답 body 는 flat envelope (`{"detail": ...}` 형식 미사용)
 """
 
 from __future__ import annotations

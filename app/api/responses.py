@@ -1,8 +1,19 @@
-"""Response builder: turn (code, context) into a DetectPostResponse envelope.
+"""응답 envelope 빌더 — `(code, context)` → `DetectPostResponse` 변환.
 
-Keeps all user-facing template rendering in one place so §2.5 rules
-(user_message must not leak position/score/entity-type/masked value) can
-be enforced with a single static check.
+모든 사용자 메시지 템플릿 렌더링을 한 곳에 모아두는 이유는 §2.5 보안 규칙
+(`user_message` 에 위치 / score / entity 코드 / 마스킹된 PII 가 절대 등장
+하지 않아야 함) 을 단일 정적 검사로 강제하기 위해서다.
+
+빌더 동작:
+  - `code` 로 `ResponseCode` 카탈로그 조회
+  - `template_vars` 로 `user_message_template` / `developer_message_template`
+    의 placeholder (예: `{filename}`) 치환
+  - BLOCK 응답 + detections 가 있으면 한국어 entity 라벨 접미사
+    `(검출된 항목: 주민등록번호, 전화번호)` 자동 부착
+  - `developer_message` 는 ERROR (`REQ-/SVR-`) 카테고리에만 채움 (§2.5)
+  - 응답 envelope 생성 후 `audit_all_user_messages()` 가 모든 템플릿이
+    §2.5 금지어 (`KR_RRN`, `score`, `presidio` 등) 를 노출하지 않는지 정적
+    검사 (테스트가 호출)
 """
 
 from __future__ import annotations

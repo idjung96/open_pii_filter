@@ -1,12 +1,29 @@
-"""POST /v1/detect/post — body PII detection (Case A/B only).
+"""`POST /v1/detect/post` — 게시글 본문 + 첨부 PII 검사 핸들러.
 
-Phase 1 scope:
-  - Case A: body BLOCK → HTTP 200 + verdict=BLOCK + skip attachment work
-  - Case B: body PASS/WARN, no attachments → HTTP 200 + verdict
-  - Case C (attachments queued, HTTP 202): NotImplemented — Phase 4 work
-  - Idempotency: in-memory cache (24 h TTL), see app/security/idempotency
+본 모듈은 외부 클라이언트가 호출하는 유일한 핵심 엔드포인트를 호스팅한다.
+호출자는 HMAC 4종 헤더로 인증 후 본문/첨부를 보내고, 핸들러는 다음 분기를
+탄다:
 
-Auth (HMAC + API key + IP allowlist) is also Phase 3+.
+  - **Case A** — 본문에 BLOCK 급 PII → 즉시 200 + verdict=BLOCK + 첨부 검사 생략
+  - **Case B** — 본문 PASS + 첨부 없음 → 즉시 200 + verdict=PASS
+  - **Case C** — 본문 PASS + 첨부 있음 → 202 `ACK-3001` + 비동기 워커가
+    `callback_url` 로 webhook 회신
+
+주요 보조 시스템:
+  - 멱등성 (`get_cache()`) — `request_id` 단위 24h 캐시, 중복 호출 시 원본
+    응답 그대로 재반환. in-progress 동시 호출은 `REQ-4005` 거절.
+  - 예외 IP (`is_exception_ip`) — 분석은 그대로 실행되지만 사용자 응답은
+    `audit_only` 모드로 PASS 강제 (audit 행에는 진짜 검출 결과 남김).
+  - 정책 캐시 (`resolve_action`) — DB 의 `pii_policies` 가 BLOCK ↔ LOG_ONLY
+    를 hot-reload. LOG_ONLY 는 사용자에게 PASS 로 보이지만 audit 에는 entity 기록.
+  - 분석기 캐시 (`get_analyzer_cache`) — Presidio + 인식기 + deny-list 합성
+    분석기를 lru cache 해서 핫패스 빨리 처리. DB 실패 시 in-memory fallback.
+
+체크/거절은 모두 `app/core/codes.CODES` 의 REQ-4xxx / SVR-5xxx 코드로 매핑되어
+응답 `code` 만 보고 클라이언트가 원인 파악 가능.
+
+인증 (HMAC + API key + IP allowlist) 은 `app.security.auth.require_auth` 가
+담당 (Phase 3+).
 """
 
 from __future__ import annotations
@@ -413,16 +430,48 @@ def _stash_audit(
         observe_detection(entity_type=et, verdict="LOG_ONLY")
 
 
-@router.post("/detect/post")
+@router.post(
+    "/detect/post",
+    summary="게시글 PII 검사 (본문 + 첨부)",
+    description="""
+게시글의 본문/제목과 첨부파일을 한 번에 검사하여 PASS/BLOCK 판정과 함께 한국어
+`user_message` 를 돌려준다.
+
+**처리 모델**
+- **Case A** — 본문에 BLOCK 급 PII → 즉시 200 BLOCK, 첨부 검사 생략
+- **Case B** — 본문 PASS + 첨부 없음 → 즉시 200 PASS
+- **Case C** — 본문 PASS + 첨부 있음 → 202 `ACK-3001` + 워커가 `callback_url` 로 webhook 전송
+
+**멱등성** — 같은 `request_id` 재전송 시 24h 캐시에서 원본 응답 반환 (REQ-4005 는 in-progress 동시 호출).
+
+**예외 IP** — `exception_ips` 에 매칭된 발신자는 분석은 그대로 실행되지만 사용자 응답이 PASS 로 강제됨 (audit 만 남음).
+
+자세한 흐름: [`docs/api_integration.md`](https://github.com/idjung96/open_pii_filter/blob/main/docs/api_integration.md).
+""".strip(),
+    responses={
+        200: {"description": "Case A (본문 BLOCK) 또는 Case B (본문 PASS) — 즉시 응답"},
+        202: {"description": "Case C — 첨부 비동기 처리 진행 (`ACK-3001` + `job` 객체)"},
+        400: {
+            "description": "`REQ-4001~4005` — 필수 필드 누락 / JSON 오류 / UUID 위반 / 중복 in-progress"
+        },
+        401: {"description": "`REQ-4010~4013` — HMAC 서명 / timestamp / nonce 위반"},
+        403: {"description": "`REQ-4014/4015` — 키 폐기 또는 IP allowlist 외 접근"},
+        413: {"description": "`REQ-4030/4031` — 본문 1 MiB 또는 첨부 20 MiB 초과"},
+        415: {"description": "`REQ-4033/4035` — 미지원 MIME 또는 deny-list 매칭"},
+        422: {"description": "`REQ-4040~4051` — 첨부 fetch/sha256/암호화 등 처리 실패"},
+        429: {"description": "`REQ-4020` — rate-limit 초과 (`Retry-After` 헤더 포함)"},
+    },
+)
 async def detect_post(
     req: DetectPostRequest,
     request: Request,
     caller: AuthedCaller = Depends(require_auth),  # noqa: B008
 ) -> JSONResponse:
-    """Detect PII in `post.title` + `post.body`.
+    """본문(title+body) + 첨부 검사 핸들러.
 
-    Phase 1: body-only sync path. Attachment routing (Case C) is rejected
-    until Phase 4 is wired up.
+    Phase 1c 이후 본문 PII 검출 → 정책 매핑 (`map_detection_to_code`) → 응답 envelope
+    구성을 모두 처리. 첨부가 있으면 Case C 분기로 비동기 워커를 fire-and-forget 으로
+    띄우고 호출자에게 202 ACK 응답.
     """
     started = time.perf_counter()
     cache: IdempotencyCache = get_cache()

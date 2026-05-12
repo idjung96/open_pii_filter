@@ -1,9 +1,21 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4 Case-C end-to-end integration tests (T4.13~T4.23).
+"""Phase 4 — Case C (첨부 비동기) end-to-end 회귀 방지 (T4.13~T4.23).
 
-Each test drives the full request → asyncio worker → DB / webhook
-pipeline using the synthetic attachment fixtures. Outbound HTTP for
-both fetch_url and callback_url is intercepted with httpx.MockTransport.
+본문 PASS + 첨부 있음 시 핸들러가 즉시 202 ACK-3001 을 돌려주고, 백그라운드
+asyncio 워커가 다음 단계를 차례로 수행하는지 11건의 케이스로 검증:
+
+  1. `fetch_url` 로 첨부 다운로드 (`httpx.MockTransport` 가 가짜 PDF/이미지
+     /HWPX 반환)
+  2. SHA-256 검증 → 위조 시 REQ-4041
+  3. ClamAV 스캔 (가짜 응답)
+  4. dispatcher 로 형식별 추출 / OCR
+  5. 분석기 + 정책 적용
+  6. `callback_url` 로 webhook POST (HMAC 서명 포함)
+  7. `extraction_jobs` 행을 COMPLETED 로 전이 + retention 시간 카운트 시작
+
+호출자 측 fetch / callback URL 모두 MockTransport 로 가로채 결정적 실행
+보장. 같은 request_id 재전송 시 멱등성 캐시가 원본 202 응답을 재반환하는
+T4.23 도 포함.
 """
 
 from __future__ import annotations

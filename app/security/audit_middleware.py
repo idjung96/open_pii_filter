@@ -1,22 +1,36 @@
-"""Starlette middleware that records one ``audit_events`` row per request
-(Phase 6, T6.4).
+"""요청 1건당 `audit_events` 행을 1건 기록하는 Starlette 미들웨어 (Phase 6, T6.4).
 
-Design
-------
-The middleware runs *outside* of FastAPI's auth dependency, but the
-endpoint handler can stash detection metadata on ``request.state`` after
-running auth + analyzer. We then read that state to populate the audit
-row.
+이 미들웨어는 모든 HTTP 요청을 가로채 다음을 기록한다:
+  - request_id (헤더 또는 body 에서 추출, 없으면 새 UUID 발급)
+  - api_key_id (require_auth 가 캐시한 caller)
+  - source_ip / method / path / http_status / response_code
+  - detected_entity_count / detected_entity_types (핸들러가 stash 한 값)
+  - request_body / response_body 의 SHA-256 hash (평문 PII 미저장)
+  - processing_ms
 
-We deliberately do **not** parse the response body — the streaming
-JSONResponse may have been built lazily, and digging into a Pydantic
-envelope from the middleware layer is fragile. Instead the detect
-endpoint sets ``request.state.audit_payload`` with the response code,
-detection count, and detection types.
+설계 결정
+---------
+미들웨어는 FastAPI 의 auth dependency *밖* 에서 동작하므로 요청 시점에는
+caller 정보를 모른다. 핸들러가 auth + analyzer 실행 후
+`request.state.caller` 와 `request.state.audit_payload` 에 결과를 stash 하면
+미들웨어가 응답 직후 그 값을 읽어 audit 행을 구성한다.
 
-If the endpoint never sets the field (validation error, 404, etc.) we
-still record an audit row with whatever info we have. The PII-aware
-fields stay zero/None in that case.
+응답 body 는 **직접 파싱하지 않는다** — JSONResponse 가 lazy build 일 수
+있고, 미들웨어 레이어에서 pydantic envelope 를 디스어셈블하는 것은 깨지기
+쉽다. 그래서 핸들러가 audit_payload (response_code, detection 카운트, entity
+types) 를 미리 채워주는 단방향 흐름을 채택.
+
+핸들러가 stash 하지 못한 경로 (validation 422 / 404 등) 도 미들웨어가 가능한
+정보만으로 audit 행을 기록 — PII 관련 필드만 0/None 으로 남는다. 즉 어떤
+요청도 audit 누락이 발생하지 않는다.
+
+순서
+----
+`main.py` 의 미들웨어 체인은 다음 순서로 등록되어 있다:
+
+  1. `BodySizeLimitMiddleware` — 1 MiB 초과는 미들웨어 자체가 거절
+     (audit 행도 만들지 않음 — DoS 폭주를 audit 폭주로 전이시키지 않기 위함)
+  2. `AuditMiddleware` — 본 모듈. 통과한 요청만 audit
 """
 
 from __future__ import annotations

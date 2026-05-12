@@ -1,10 +1,16 @@
 # SYNTHETIC DATA - NOT REAL PII
-"""Phase 4 extractor unit-level integration tests (T4.1~T4.12).
+"""Phase 4 — 첨부 추출기 통합 회귀 방지 (T4.1~T4.12).
 
-Each fixture is built programmatically inside the test module so we
-never persist real or PII-bearing files to disk. Network calls in the
-fetcher are mocked with httpx.MockTransport so the tests stay
-hermetic.
+각 형식별 추출기 (`extract_pdf` / `extract_docx` / `extract_hwpx` 등) 와
+`fetcher` (`fetch_attachment`) 의 통합 동작을 한 모듈에서 검증한다:
+
+  - 모든 fixture 는 테스트 코드 안에서 프로그램적으로 생성 — 실 PII 파일이
+    디스크에 저장되지 않도록 함
+  - `httpx.MockTransport` 로 네트워크 호출을 가로채 hermetic / 결정적 실행
+  - 형식별 정상 추출 + 에러 경로 (REQ-4040/4041/4042/4051) 모두 커버
+  - HWP 5 / HWPX 처리 + ClamAV soft-fail 분기 검증
+
+이 모듈이 깨지면 첨부 검사 자체가 무력화되므로 가장 중요한 통합 가드.
 """
 
 from __future__ import annotations

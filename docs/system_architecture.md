@@ -90,8 +90,8 @@
 | **PostgreSQL 16** | API 키, 감사로그, 패턴, 정책, 작업 상태, 피드백 저장 |
 | **Redis 7** | GCRA 토큰 버킷 rate limiting, nonce 중복 방지 캐시 |
 | **ClamAV** | 첨부파일 악성코드 스캔 (TCP INSTREAM, 소프트 실패 허용) |
-| **vLLM (Qwen3.5-VL)** | 이미지 OCR — 한국어 포함 다국어 텍스트 + 바운딩박스 추출 |
-| **PaddleOCR** | 대안 OCR 엔진 (에어갭/CPU 환경, 선택 설치) |
+| **PaddleOCR PP-OCRv5 (한국어, CPU)** | 이미지 OCR 기본 엔진 — 자체 호스팅, in-process. 외부 송출 없음 |
+| **vLLM (Qwen3.5-VL)** | OCR 폴백 / 옵트인 — `OCR_ENGINE=vlm` 또는 Paddle 예외 시 자동 호출 (사내 vLLM) |
 | **백그라운드 워커** | asyncio fire-and-forget: 첨부처리·감사로그GC·알림 |
 | **Nginx** | TLS 종단, 신뢰 영역 분리 (외부:443 / 내부:8443) |
 
@@ -199,9 +199,12 @@ HTTP 202 반환 (ACK-3001)
 │    │                                     │  │
 │    │  PDF (텍스트) → pdfplumber           │  │
 │    │  PDF (스캔)   → pypdfium2 → OCR     │  │
-│    │  DOCX         → python-docx         │  │
-│    │  HWP/HWPX     → pyhwpx (ext)        │  │
+│    │  DOCX/XLSX/PPTX → python-docx /     │  │
+│    │                   openpyxl / pptx    │  │
+│    │  TXT/MD       → UTF-8 / CP949       │  │
 │    │  이미지        → OCR 디스패처        │  │
+│    │  HWP/HWPX/ZIP → deny-list 거절      │  │
+│    │                  (REQ-4035)          │  │
 │    └──────────────┬──────────────────────┘  │
 │                   ▼                         │
 │    ┌─────────────────────────────────────┐  │
@@ -225,11 +228,14 @@ HTTP 202 반환 (ACK-3001)
 
 | MIME 타입 | 처리 방식 |
 |-----------|----------|
-| `application/pdf` (텍스트) | pdfplumber 텍스트 추출 |
-| `application/pdf` (스캔) | pypdfium2 → OCR |
-| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | python-docx |
-| `application/x-hwp`, `application/haansofthwp` | pyhwpx |
-| `image/png`, `image/jpeg`, `image/tiff`, `image/bmp`, `image/webp`, `image/gif` | OCR |
+| `application/pdf` (텍스트 레이어) | pdfplumber 텍스트 추출 |
+| `application/pdf` (스캔본) | pypdfium2 페이지 렌더 → PaddleOCR |
+| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX) | python-docx |
+| `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (XLSX) | openpyxl |
+| `application/vnd.openxmlformats-officedocument.presentationml.presentation` (PPTX) | python-pptx |
+| `text/plain`, `text/markdown` | UTF-8 → CP949 폴백 디코드 |
+| `image/png`, `image/jpeg`, `image/tiff`, `image/bmp`, `image/webp`, `image/gif` | PaddleOCR (CPU 기본) → 실패 시 vLLM 폴백 |
+| HWP / HWPX / ZIP / 레거시 OLE (`.doc`/`.xls`/`.ppt`) | `attachment_blocklist` 가 일괄 거절 (`REQ-4035`) |
 
 > Phase 9D 변경: 마스킹된 PDF/이미지 산출물은 더 이상 생성되지 않습니다.
 > 첨부파일에서 PII 가 검출되면 즉시 BLOCK 으로 거절되며, 사용자가 직접
@@ -246,14 +252,15 @@ HTTP 202 반환 (ACK-3001)
 ┌─────────────────────────────────────────┐
 │           OCR 디스패처 (ocr.py)          │
 │                                         │
-│  OCR_ENGINE=vlm?                        │
-│    └── vlm_ocr() ──► vLLM Qwen3.5-VL   │
+│  OCR_ENGINE=paddle (기본)               │
+│    └── paddle_ocr() ──► PaddleOCR       │
+│                          PP-OCRv5 (한국어, CPU) │
+│                          (text + bbox 배열)    │
+│                                         │
+│  Paddle 예외 / OCR_ENGINE=vlm 시 폴백   │
+│    └── vlm_ocr() ──► vLLM Qwen3.5-VL    │
 │                      /no_think prefix    │
 │                      JSON 응답 파싱      │
-│                      (text + bbox 배열) │
-│                                         │
-│  OCR_ENGINE=paddle (또는 VLM 실패 폴백)│
-│    └── paddle_ocr()                     │
 └────────────────┬────────────────────────┘
                  │
                  ▼ OCRResult {text, boxes[], width, height}
