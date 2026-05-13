@@ -745,10 +745,7 @@ async def _poc_shadow_process(
 
     try:
         # 1. size guard — analyze() 호출 비용을 보호한다.
-        if (
-            len(req.post.title) > MAX_TITLE_LEN
-            or len(req.post.body) > MAX_BODY_LEN
-        ):
+        if len(req.post.title) > MAX_TITLE_LEN or len(req.post.body) > MAX_BODY_LEN:
             return
 
         # 2-3. 본문 분석 + shadow analyzer
