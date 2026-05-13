@@ -125,6 +125,15 @@ class Settings(BaseSettings):
     admin_dashboard_username: str = "admin"
     admin_dashboard_password: str = "changeme"  # noqa: S105 — dev default; override in env
 
+    # ── PoC (shadow) mode — 상용 PII filter 와 병행 운영 비교용 ───────────
+    # 활성화 시 분석은 정상 수행하되 사용자 응답은 항상 PASS(OK-0000) 로 고정
+    # 한다. 실제 verdict / 검출 결과는 ``poc_log_file`` 에 JSON Lines 로 기록
+    # 되어 상용 필터와 사후 비교가 가능하다. 첨부(Case C) 도 같은 규칙으로
+    # 강제 PASS + 로그 기록된다.
+    poc_mode: bool = False
+    # 절대/상대 경로 모두 허용. 디렉터리는 자동 생성된다.
+    poc_log_file: str = "logs/poc_shadow.log"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -496,6 +496,15 @@ async def detect_post(
     # visibility into who is publishing what.
     audit_only = is_exception_ip(req.author.ip or "")
 
+    # PoC(shadow) 모드 — 전역 토글. 활성화 시 모든 요청은 audit_only 와
+    # 동일하게 분석은 정상 실행되지만 응답은 PASS 로 강제되며, 실제 판정은
+    # `app.security.poc_logger` 가 파일로 별도 기록한다 (상용 PII filter 와
+    # 사후 비교용).
+    from app.config import get_settings as _get_settings
+
+    poc_mode = bool(_get_settings().poc_mode)
+    force_pass = audit_only or poc_mode
+
     try:
         # ── §2.8 length limits → REQ-4030 (HTTP 413) ──────────────────
         if len(req.post.title) > MAX_TITLE_LEN:
@@ -608,7 +617,8 @@ async def detect_post(
 
         all_dets = title_dets + body_dets
         log_only_types = title_log | body_log
-        body_code = _decide_body_code(all_dets)
+        actual_body_code = _decide_body_code(all_dets)
+        body_code = actual_body_code
 
         # Phase 9D — WARN 등급 / 마스킹 결과 폐기. 검출 시 BLOCK 또는 PASS만.
 
@@ -616,7 +626,8 @@ async def detect_post(
         # remain attached to the request and travel into the audit log
         # via `_stash_audit`, but the user-facing response code is
         # forced to OK-0000 (PASS).
-        if audit_only:
+        # PoC 모드도 동일하게 응답만 PASS 로 강제한다.
+        if force_pass:
             body_code = "OK-0000"
 
         # ── Phase 7: shadow analyzer — fire-and-forget audit-only pass ──
@@ -625,6 +636,27 @@ async def detect_post(
             shadow_analyzer=shadow_analyzer,
             production_types={d.entity_type for d in all_dets} | log_only_types,
         )
+
+        # PoC 모드 — 실제 판정을 파일 로그로 별도 기록 (상용 필터와 비교용).
+        # audit_only 와 무관하게 poc_mode 가 켜져 있으면 항상 기록한다.
+        if poc_mode:
+            from app.core.codes import get_code as _get_code
+            from app.security import poc_logger
+
+            _actual_rc = _get_code(actual_body_code)
+            poc_logger.log_body_decision(
+                request_id=req.request_id,
+                actual_code=actual_body_code,
+                actual_verdict=str(_actual_rc.verdict),
+                detections=all_dets,
+                log_only_types=log_only_types,
+                shadow_hit_types=shadow_types,
+                strictness=req.options.strictness,
+                audit_only=audit_only,
+                author_ip=req.author.ip,
+                board_id=req.post.board_id,
+                processing_ms=int((time.perf_counter() - started) * 1000),
+            )
 
         # ── Case A: body BLOCK → skip attachments ─────────────────────
         rc = get_code(body_code)
@@ -669,6 +701,8 @@ async def detect_post(
             )
 
         # ── Case C: body PASS + attachments → async (T4.13~T4.16) ─────
+        # PoC 모드는 audit_only 처럼 첨부 결과도 PASS 로 강제. 워커가
+        # 실제 판정을 poc_logger 로 별도 기록한다.
         return await _enqueue_attachment_job(
             req,
             body_code=body_code,
@@ -678,7 +712,8 @@ async def detect_post(
             request=request,
             log_only_types=log_only_types,
             shadow_hit_types=shadow_types,
-            audit_only=audit_only,
+            audit_only=force_pass,
+            poc_mode=poc_mode,
         )
 
     except Exception:
@@ -727,6 +762,7 @@ async def _enqueue_attachment_job(
     log_only_types: set[str] | None = None,
     shadow_hit_types: set[str] | None = None,
     audit_only: bool = False,
+    poc_mode: bool = False,
 ) -> JSONResponse:
     """Create an extraction job + spawn the asyncio worker.
 
@@ -768,6 +804,7 @@ async def _enqueue_attachment_job(
             sessionmaker=sm,
             analyzer_factory=_resolve_analyzer,
             audit_only=audit_only,
+            poc_mode=poc_mode,
         ),
         name=f"pii-job-{job_id}",
     )

@@ -268,11 +268,15 @@ async def process_attachment_job(
     webhook_sender: Callable[..., Awaitable[bool]] | None = None,
     delete_sender: Callable[..., Awaitable[bool]] | None = None,
     audit_only: bool = False,
+    poc_mode: bool = False,
 ) -> None:
     """Run the Case-C async pipeline end-to-end.
 
     The function is fire-and-forget from the request handler's POV; any
     raised exception is logged + recorded on the job row.
+
+    ``poc_mode`` 가 True 면 사용자 응답은 PASS 로 강제(``audit_only`` 와 동일)
+    되지만 ``app.security.poc_logger`` 가 실제 판정을 별도 파일에 기록한다.
     """
     sender = webhook_sender or send_webhook
     deleter = delete_sender or send_delete_request
@@ -313,9 +317,45 @@ async def process_attachment_job(
                 )
 
         verdict, overall_code = _overall_verdict(body_verdict, attachment_results)
+        actual_verdict = verdict
+        actual_code = overall_code
+
+        # PoC 모드 — 실제 판정을 파일 로그로 별도 기록 (상용 필터 비교용).
+        # 평문 PII 는 절대 기록하지 않는다 — Detection 메타만 직렬화.
+        if poc_mode:
+            from app.security import poc_logger
+
+            poc_logger.log_attachment_decision(
+                request_id=request_id,
+                job_id=job_id,
+                actual_code=actual_code,
+                actual_verdict=str(actual_verdict),
+                attachment_summaries=[
+                    {
+                        "attachment_id": r.attachment_id,
+                        "filename": r.filename,
+                        "verdict": str(r.verdict),
+                        "code": r.code,
+                        "detections": [
+                            {
+                                "field": d.field,
+                                "entity_type": d.entity_type,
+                                "code": d.code,
+                                "score": round(float(d.score), 4),
+                                "start": d.start,
+                                "end": d.end,
+                            }
+                            for d in r.detections
+                        ],
+                    }
+                    for r in attachment_results
+                ],
+            )
+
         # Phase 4b/C — exception-IP audit-only override.
         # Detections stay in `attachment_results` for the audit row;
         # only the user-facing verdict + code are demoted to PASS.
+        # PoC 모드도 같은 규칙으로 PASS 로 강제한다.
         if audit_only:
             verdict = Verdict.PASS
             overall_code = "OK-0000"
