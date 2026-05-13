@@ -101,9 +101,7 @@ async def test_poc_mode_forces_pass_but_logs_actual_block(
     file_text = poc_log_path.read_text(encoding="utf-8")
     assert rrn not in file_text, "PoC 로그에 평문 PII 가 기록됨 (§2.5 위반)"
     rrn_digits = rrn.replace("-", "")
-    assert rrn_digits not in file_text, (
-        "PoC 로그에 hyphen 없는 평문 RRN 이 기록됨 (§2.5 위반)"
-    )
+    assert rrn_digits not in file_text, "PoC 로그에 hyphen 없는 평문 RRN 이 기록됨 (§2.5 위반)"
 
 
 # ── PoC 모드 OFF: 기존 동작 (BLOCK 반환) ─────────────────────────────────

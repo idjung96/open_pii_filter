@@ -177,9 +177,7 @@ def test_multiple_calls_append(_poc_on: Path) -> None:
 
 
 # ── I/O 실패 swallow ─────────────────────────────────────────────────────
-def test_write_failure_does_not_raise(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_write_failure_does_not_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bad = tmp_path / "no_such_dir" / "x" / "poc.log"
     monkeypatch.setattr(
         "app.config.get_settings",
