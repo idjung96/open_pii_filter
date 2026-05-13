@@ -465,7 +465,56 @@ python -m app.cli pattern add --help
 alembic -c alembic.ini history
 ```
 
-## 부록 B. 관련 문서
+## 부록 B. PoC(shadow) 모드 — 상용 PII filter 와 병행 비교
+
+기존 상용 PII filter 와 본 ``open_pii_filter`` 의 검출률을 실 환경에서 사후
+비교하기 위한 운영 토글. **항상 응답을 PASS 로 강제**하면서 내부적으로는
+정상 분석을 수행하여 실제 판정을 파일에 기록한다.
+
+### 동작
+
+- 사용자/호출자 입장에서는 모든 요청이 `code=OK-0000` / `verdict=PASS`
+- 내부적으로는 본문/제목/첨부 분석이 정상 수행됨 (검출 → 점수 매핑 → 정책
+  적용까지 동일)
+- 실제 판정은 `POC_LOG_FILE` 에 JSON Lines (한 줄 = 한 요청) 로 append 기록
+  - `kind`: `body` 또는 `attachment`
+  - `actual_code` / `actual_verdict`: PASS 강제 *전* 의 실제 판정
+  - `forced_response_code`: 항상 `OK-0000` (호출자에게 응답된 코드)
+  - `detections`: entity_type / code / score / start / end 메타데이터
+  - **평문 PII 는 절대 기록되지 않음** (§2.5 보안 가드 준수)
+
+### 활성화
+
+```bash
+# .env
+POC_MODE=true
+POC_LOG_FILE=logs/poc_shadow.log
+```
+
+컨테이너 환경에서는 `POC_LOG_FILE` 경로를 호스트 볼륨에 마운트된 디렉터리로
+지정해 로그가 컨테이너 재시작 시 유실되지 않도록 한다.
+
+### 비교 분석 예시
+
+```bash
+# 검출 건수 (실제로 BLOCK 처리됐어야 할 요청 수)
+jq -r 'select(.actual_verdict == "BLOCK") | .actual_code' logs/poc_shadow.log \
+  | sort | uniq -c
+
+# 엔티티 종류 분포
+jq -r '.detections[].entity_type' logs/poc_shadow.log | sort | uniq -c
+```
+
+상용 filter 로그와 `request_id` 기준으로 join 하여 detection delta 를 산출한다.
+
+### 운영 주의
+
+- 활성화 상태에서는 어떤 PII 도 차단되지 않으므로 **반드시 상용 filter 가
+  앞단에서 동작하고 있는 환경에서만** 켠다.
+- 로그 파일은 무제한 append 이므로 운영 시 logrotate / 외부 출력기로 회전한다.
+- PoC 비교가 끝나면 `POC_MODE=false` 로 되돌려 정상 BLOCK 동작을 복원한다.
+
+## 부록 C. 관련 문서
 
 - `PII_API_Development_Requirements.md` — 사양 단일 출처 (비공개 내부 문서)
 - `docs/data_flow.md` — 데이터 흐름도
