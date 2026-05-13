@@ -3,15 +3,16 @@
 
 검증 시나리오:
   - POST /v1/detect/post 에 BLOCK 가는 합성 PII 본문을 보낸다
-  - 응답이 PASS(OK-0000) 로 강제된다
-  - 동시에 PoC 로그 파일에 실제 판정 (BLOCK + 검출 메타) 이 JSON Lines 로
-    1행 기록된다
+  - 응답이 즉시 PASS(OK-0000) 로 반환된다 (분석 대기 없음)
+  - 별도 background 태스크가 끝난 뒤 PoC 로그 파일에 실제 판정 (BLOCK +
+    검출 메타) 이 JSON Lines 로 1행 기록된다
   - 평문 PII 가 로그 파일에 절대 노출되지 않는다 (§2.5)
   - poc_mode=False 일 때는 기존 동작과 동일하다
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from pathlib import Path
@@ -24,6 +25,21 @@ from tests.fixtures.synthetic_pii_generator import SyntheticPIIGenerator
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
+
+
+async def _wait_for_log(path: Path, *, expected_lines: int = 1, timeout_s: float = 5.0) -> None:
+    """Background 태스크가 PoC 로그를 append 할 때까지 폴링.
+
+    Fire-and-forget 백그라운드 분석은 응답 반환 후에 실행되므로 테스트에서
+    완료를 동기적으로 기다려야 한다.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout_s
+    while asyncio.get_event_loop().time() < deadline:
+        if path.exists():
+            lines = path.read_text(encoding="utf-8").splitlines()
+            if len(lines) >= expected_lines:
+                return
+        await asyncio.sleep(0.05)
 
 
 def _settings_with(tmp_path: Path, **overrides) -> Settings:
@@ -67,13 +83,13 @@ def _payload(body: str, *, ip: str = "203.0.113.5") -> dict:
     }
 
 
-# ── PoC 모드 ON: 응답은 PASS, 로그는 BLOCK ───────────────────────────────
+# ── PoC 모드 ON: 응답은 즉시 PASS, 로그는 background 에서 BLOCK 기록 ─────
 @pytest.mark.asyncio
 async def test_poc_mode_forces_pass_but_logs_actual_block(
     client: AsyncClient,
     poc_log_path: Path,
 ) -> None:
-    """PoC 모드: 합성 RRN 이 들어간 본문 → 응답 PASS, 로그에 실제 BLOCK 기록."""
+    """PoC 모드: 합성 RRN 본문 → 즉시 PASS, background 에서 BLOCK 기록."""
     g = SyntheticPIIGenerator(seed=42)
     rrn = g.gen_rrn(valid=True)  # 유효한 합성 RRN
     body = f"제 주민번호는 {rrn} 입니다."
@@ -85,6 +101,9 @@ async def test_poc_mode_forces_pass_but_logs_actual_block(
     # 사용자에게는 PASS
     assert data["code"] == "OK-0000", f"PoC 모드인데 BLOCK 응답이 반환됨: {data}"
     assert data["verdict"] == "PASS"
+
+    # Background 분석이 완료될 때까지 대기
+    await _wait_for_log(poc_log_path, expected_lines=1, timeout_s=10.0)
 
     # 로그 파일에는 실제 BLOCK 이 기록됐는지
     assert poc_log_path.exists(), "poc 로그 파일이 생성되지 않음"
@@ -121,7 +140,7 @@ async def test_poc_mode_off_returns_block_no_log_file(
     assert not poc_off.exists(), "PoC OFF 인데 로그 파일이 생성됨"
 
 
-# ── PoC 모드 ON: PASS 입력은 그대로 PASS + 로그도 PASS ──────────────────
+# ── PoC 모드 ON: PASS 입력은 그대로 PASS + background 로그도 PASS ────────
 @pytest.mark.asyncio
 async def test_poc_mode_clean_body_logs_pass(
     client: AsyncClient,
@@ -134,8 +153,33 @@ async def test_poc_mode_clean_body_logs_pass(
     assert data["code"] == "OK-0000"
     assert data["verdict"] == "PASS"
 
-    if poc_log_path.exists() and poc_log_path.stat().st_size > 0:
-        rec = json.loads(poc_log_path.read_text(encoding="utf-8").splitlines()[-1])
-        assert rec["actual_verdict"] == "PASS"
-        assert rec["actual_code"] == "OK-0000"
-        assert rec["detections"] == []
+    await _wait_for_log(poc_log_path, expected_lines=1, timeout_s=10.0)
+    rec = json.loads(poc_log_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert rec["actual_verdict"] == "PASS"
+    assert rec["actual_code"] == "OK-0000"
+    assert rec["detections"] == []
+
+
+# ── PoC 모드: 응답 즉시 반환 — 분석을 기다리지 않는다 ────────────────────
+@pytest.mark.asyncio
+async def test_poc_mode_response_is_immediate(
+    client: AsyncClient,
+    poc_log_path: Path,
+) -> None:
+    """PoC 모드: 본문 PII 분석을 동기적으로 기다리지 않고 즉시 PASS 반환.
+
+    응답 ``processing_ms`` 가 본문 분석 비용 (≥수백 ms) 보다 훨씬 작아야
+    한다 — 백그라운드 태스크가 동작한다는 증거.
+    """
+    g = SyntheticPIIGenerator(seed=42)
+    body = " ".join(f"제 주민번호는 {g.gen_rrn(valid=True)} 입니다." for _ in range(10))
+
+    resp = await client.post("/v1/detect/post", json=_payload(body))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["code"] == "OK-0000"
+    # 본문 분석은 sync 경로에서 ~수백 ms ~ 수 초 걸린다. 즉시 PASS 라면
+    # 200 ms 미만이 합리적인 상한선. 환경 노이즈를 고려해 500 ms 로 잡는다.
+    assert data["processing_ms"] < 500, (
+        f"PoC 모드인데 응답이 분석을 동기적으로 기다림: {data['processing_ms']}ms"
+    )
