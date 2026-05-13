@@ -181,6 +181,85 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000
 
 ---
 
+## 단일 서버 운영 주의사항
+
+모든 컴포넌트(FastAPI + PostgreSQL + Redis + ClamAV + PaddleOCR)를 한 호스트의 Docker Compose 로 운영할 때 권장 사양과 운영 가이드입니다. vLLM 은 사용하지 않고 PaddleOCR(CPU) 로 모든 OCR 을 처리한다는 전제.
+
+### 권장 사양 (단일 서버, vLLM 미사용)
+
+| 부하 가정 | CPU | RAM | Disk |
+|---|---|---|---|
+| **최소** (PoC / 게시판 ≤ 50 posts/시간 / 첨부 ≤ 10%) | 4 vCPU | 8 GB | 100 GB SSD |
+| **표준 권장** (100~500 posts/시간 / 첨부 ≤ 30%) | **8 vCPU** | **16 GB** | **200 GB SSD** |
+| **여유** (첨부 빈도 50%+, OCR 페이지 다수) | 16 vCPU | 32 GB | 500 GB SSD |
+
+부하 테스트(`docs/load_test_report.md`)상 본문 분석 한정으로 단일 인스턴스 ~60 RPS / p99 ≈ 1 s. OCR 첨부가 핵심 병목.
+
+### CPU 요구 — AVX2 필수
+
+PaddleOCR / spaCy 추론은 AVX2 명령어를 적극 활용합니다. **AVX2 미지원 CPU 에서는 OCR 이 5~10 배 느려지므로 운영 환경에서 사실상 사용 불가**합니다.
+
+**AVX2 지원 CPU (x86_64)**
+
+| 벤더 | 세대/제품군 | 출시 시점 |
+|---|---|---|
+| **Intel Core** | Haswell (4th gen, i3/i5/i7-4xxx) 이후 — 4th ~ 14th gen | 2013 ~ |
+| **Intel Xeon** | E3/E5/E7 v3 이후, Xeon Scalable(Skylake-SP) 전 세대 | 2014 ~ |
+| **Intel Atom** | Tremont(C5xxx, N6xxx) 이후 (Goldmont Plus 는 부분 지원) | 2020 ~ |
+| **AMD Ryzen** | Zen1(Ryzen 1000) 이후 — 모든 Zen2/Zen3/Zen4/Zen5 | 2017 ~ |
+| **AMD EPYC** | Naples(7001) 이후 — Rome/Milan/Genoa/Bergamo 전부 | 2017 ~ |
+| **AMD Threadripper** | 전 모델 | 2017 ~ |
+
+> ⚠ **미지원**: Intel Pentium/Celeron 저전력 모델 일부, Intel Atom Bay Trail/Cherry Trail/Apollo Lake, 모든 **ARM CPU** (Apple Silicon, AWS Graviton, Ampere Altra 등 — Neon 으로 동작은 하지만 성능 저하). 운영 환경 권장 X.
+
+**클라우드 인스턴스 — AVX2 지원 확인된 패밀리**
+
+| 클라우드 | 지원 | 비지원 |
+|---|---|---|
+| AWS EC2 | t2 / t3 / t3a / m5 / m5a / c5 / c5a / r5 / r5a 이상 | Graviton(t4g/m6g/c6g/r6g 등) |
+| GCP | n1 / n2 / n2d / c2 / c2d / e2 이상 | Tau T2A(ARM) |
+| Azure | D / E / F-series v3 이상 | Ampere Altra(Dpsv5 등 ARM) |
+
+**런타임 확인**: `grep -m1 avx2 /proc/cpuinfo` (출력 있어야 OK)
+
+### 메모리 예산 (16 GB 기준 피크)
+
+```
+FastAPI + Presidio + spaCy + PaddleOCR 모델 + 인식기 캐시 ........ ~2.5 GB
+PostgreSQL 16 (shared_buffers 512 MB) ........................... ~1.0 GB
+Redis 7 (idempotency 24h + rate-limit + nonce 캐시) ............. ~0.3 GB
+ClamAV daemon (시그니처 풀로드) ................................. ~1.5 GB
+첨부 추출/OCR 작업 transient peak ............................... ~2.0 GB
+OS / kernel / page cache / 컨테이너 오버헤드 .................... ~2.0 GB
+─────────────────────────────────────────────────────────────────
+합계 ≈ 9.3 GB                       여유 ≈ 6.7 GB ✅
+```
+
+### 운영 체크리스트
+
+1. **AVX2 확인 후 배포** — `grep -m1 avx2 /proc/cpuinfo` 로 사전 점검. 미지원 시 호스트 교체 필요.
+2. **`OMP_NUM_THREADS=1` / `MKL_NUM_THREADS=1`** — 컨테이너 env 로 고정. PaddleOCR 내부 스레드가 코어를 점유해 본문 분석 latency 가 튀는 것을 방지.
+3. **swap 비활성화** (RAM 16 GB 이상 호스트) — OCR 워커가 swap 에 빠지면 한 첨부에 분 단위 소요. `swapoff -a` + `vm.swappiness=0`.
+4. **Postgres 튜닝** — `shared_buffers=512MB`, `work_mem=16MB`, `effective_cache_size=4GB` 권장.
+5. **ClamAV `freshclam`** — 별도 schedule (cron / systemd timer). 시그니처 업데이트 중 RAM 이 일시적으로 +1 GB 사용.
+6. **PoC 로그 회전** — `POC_MODE=true` 운영 시 `POC_LOG_FILE` 은 무제한 append. `logrotate` 일/주 단위 설정 필수.
+7. **외부 통신 방화벽** — 8000/tcp (또는 nginx 80/443). outbound 80/443 (첨부 fetch + ClamAV 시그니처 + webhook), 내부 5432/6379/3310.
+8. **컨테이너 디스크 모니터링** — `pgdata` 볼륨 + audit 1년 보존 + PoC 로그. 200 GB 기준 5년 이상 여유.
+
+### 디스크 사용 추정 (1년 기준)
+
+| 항목 | 크기 |
+|---|---|
+| 컨테이너 이미지 + 모델 (spaCy 600 MB + PaddleOCR 200 MB + venv 3 GB) | ~5 GB |
+| Postgres `detections` 30일 retention (AES-256 암호화) | ~1~2 GB |
+| Postgres `audit_events` 365일 retention | ~1~3 GB |
+| PoC 로그 (`POC_LOG_FILE`) — logrotate 가정 | ~1~5 GB |
+| Redis AOF | ~500 MB |
+
+> 상세 운영 절차 → [`docs/operations.md`](docs/operations.md)
+
+---
+
 ## 주요 기능
 
 | 기능 | 설명 |
